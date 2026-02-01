@@ -122,16 +122,35 @@ public class CreateBoard extends JPanel {
         }
 
         if (piece == 1) { // White Pawn check
-            if (start - end == 8) return board[end] == 0;
-            if (start - end == 16 && start / 8 == 6) { 
-                return board[end] == 0 && isPathClear(start, end);
+            int startCol = start % 8;
+            int endCol = end % 8;
+
+            if (startCol == endCol && board[end] == 0) {
+                if (start - end == 8) return true;
+                if (start - end == 16 && start / 8 == 6) return isPathClear(start, end);
+            }
+
+            if (start - end == 7 || start - end == 9) {
+                if (Math.abs((start % 8) - (end % 8)) == 1 && board[end] != 0) return true;
             }
 
             return false;
         }
 
         if (piece == 9) { // Black Pawn check
-            return (start - end == -8 || start - end == -16) && isPathClear(start, end);
+            int startCol = start % 8;
+            int endCol = end % 8;
+
+            if (startCol == endCol && board[end] == 0) {
+                if (end - start == 8) return true;
+                if (end - start == 16 && start / 8 == 1) return isPathClear(start, end);
+            }
+
+            if (end - start == 7 || end - start == 9) {
+                if (Math.abs((start % 8) - (end % 8)) == 1 && board[end] != 0) return true;
+            }
+
+            return false;
         }
 
         if (piece == 2 || piece == 10) { // Knight Check
