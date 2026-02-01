@@ -2,12 +2,14 @@ import javax.swing.*;
 import java.awt.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.awt.image.TileObserver;
 import java.io.File;
 
 public class CreateBoard extends JPanel {
     private final int TILESIZE = 80;
     private int selectedTile = -1;
     private int sourceTile = -1;
+    private int currentTurn = 1;
 
     private int[] board = {
         12, 10, 11, 13, 14, 11, 10, 12, 
@@ -36,14 +38,27 @@ public class CreateBoard extends JPanel {
                     
                     if (sourceTile == -1) {
                         if (board[clickedIndex] != 0) {
-                            sourceTile = clickedIndex;
+                            boolean isWhitePiece = board[clickedIndex] < 7;
+                            boolean isWhiteTurn = (currentTurn == 1);
+
+                            if (isWhitePiece == isWhiteTurn) {
+                                sourceTile = clickedIndex;
+                            } else {
+                                System.out.println("its not your turn. buddy.");
+                            }
                         } 
                     } else {
                         if (clickedIndex == sourceTile) {
                             sourceTile = -1;
                         } else {
-                            board[clickedIndex] = board[sourceTile];
-                            board[sourceTile] = 0;
+                            if (moveLegal(sourceTile, clickedIndex)) {
+                                board[clickedIndex] = board[sourceTile];
+                                board[sourceTile] = 0;
+
+                                currentTurn = (currentTurn == 1) ? 2 : 1;
+                            } else {
+                                System.out.println("ya move wong");
+                            }
 
                             sourceTile = -1;
                         }
@@ -85,11 +100,101 @@ public class CreateBoard extends JPanel {
                 g.fillRect(col * TILESIZE, row * TILESIZE, TILESIZE, TILESIZE);
             }
 
+            if (i == sourceTile) {
+                g.setColor(new Color(255, 255, 0, 150));
+                g.fillRect(col * TILESIZE, row * TILESIZE, TILESIZE, TILESIZE);
+            }
+
             int pieceValue = board[i];
             if (pieceValue != 0 && pieceImages[pieceValue] != null) {
                 g.drawImage(pieceImages[pieceValue], col * TILESIZE, row * TILESIZE, TILESIZE, TILESIZE, null);
             }
         }
+    }
+
+    public boolean moveLegal(int start, int end) {
+        int piece = board[start];
+
+        if (board[end] != 0) {
+            boolean startIsWhite = board[start] < 7;
+            boolean endIsWhite = board[end] < 7;
+            if (startIsWhite == endIsWhite) return false; 
+        }
+
+        if (piece == 1) { // White Pawn check
+            if (start - end == 8) return board[end] == 0;
+            if (start - end == 16 && start / 8 == 6) { 
+                return board[end] == 0 && isPathClear(start, end);
+            }
+
+            return false;
+        }
+
+        if (piece == 9) { // Black Pawn check
+            return (start - end == -8 || start - end == -16) && isPathClear(start, end);
+        }
+
+        if (piece == 2 || piece == 10) { // Knight Check
+            int startCol = start % 8;
+            int startRow = start / 8;
+            int endCol = end % 8;
+            int endRow = end / 8;
+
+            int colDiff = Math.abs(startCol - endCol);
+            int rowDiff = Math.abs(startRow - endRow);
+
+            return (colDiff == 1 && rowDiff == 2) || (colDiff == 2 && rowDiff == 1);
+        } 
+
+        if (piece == 3 || piece == 11) { // Bishop check
+            int colDiff = Math.abs((start % 8) - (end % 8));
+            int rowDiff = Math.abs((start / 8) - (end / 8));
+
+            if (colDiff != rowDiff) {
+                return false;
+            }
+            return isPathClear(start, end);
+        }
+
+        if (piece == 4 || piece == 12) { // Rook check
+            return ((start / 8 == end / 8) || (start % 8 == end % 8)) && isPathClear(start, end);
+        }
+
+        if (piece == 5 || piece == 13) { // Queen check
+            int colDiff = Math.abs((start % 8) - (end % 8));
+            int rowDiff = Math.abs((start / 8) - (end / 8));
+
+
+            return ((start / 8 == end / 8) || (start % 8 == end % 8) || colDiff == rowDiff) && isPathClear(start, end);
+        }
+
+        if (piece == 6 || piece == 14) { // King check
+            int colDiff = Math.abs((start % 8) - (end % 8));
+            int rowDiff = Math.abs((start / 8) - (end / 8));
+
+            return colDiff <= 1 && rowDiff <= 1;
+        }
+
+        return true;
+    }
+
+    public boolean isPathClear(int start, int end) {
+        int diff = end - start;
+        int step = 0;
+
+        if (Math.abs(diff) % 8 == 0) step = (diff > 0) ? 8 : -8; 
+        else if (start / 8 == end / 8) step = (diff > 0) ? 1 : -1; 
+        else if (Math.abs(diff) % 7 == 0) step = (diff > 0) ? 7 : -7; 
+        else if (Math.abs(diff) % 9 == 0) step = (diff > 0) ? 9 : -9;
+        else return true;
+
+        int current = start + step;
+        while (current != end) {
+            if (board[current] != 0) return false;
+            current += step;
+        }
+
+        return true;
     }
 
     public static void main(String[] args) {
