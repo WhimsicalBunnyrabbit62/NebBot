@@ -10,6 +10,10 @@ public class CreateBoard extends JPanel {
     private int selectedTile = -1;
     private int sourceTile = -1;
     private int currentTurn = 1;
+    private boolean canCastleWhite = true;
+    private boolean canCastleBlack = true;
+    private boolean castling = false;
+    private int enPassantTarget = -1;
 
     private int[] board = {
         12, 10, 11, 13, 14, 11, 10, 12, 
@@ -52,10 +56,34 @@ public class CreateBoard extends JPanel {
                             sourceTile = -1;
                         } else {
                             if (moveLegal(sourceTile, clickedIndex)) {
-                                board[clickedIndex] = board[sourceTile];
-                                board[sourceTile] = 0;
+                                int piece = board[sourceTile];
 
+                                if ((board[sourceTile] == 1 || board[sourceTile] == 9) && clickedIndex == enPassantTarget) {
+                                    int victimIndex = (currentTurn == 1) ? clickedIndex + 8 : clickedIndex - 8;
+                                    board[victimIndex] = 0; 
+                                }
+
+                                if (castling) {
+                                    if (clickedIndex == 58 || clickedIndex == 2) {
+                                        castleQueen(currentTurn == 1);
+                                    } else {
+                                        castleKing(currentTurn == 1);
+                                    }
+                                } else {
+                                    board[clickedIndex] = board[sourceTile];
+                                    board[sourceTile] = 0;
+                                }
+
+                                if (piece == 1 && sourceTile - clickedIndex == 16) {
+                                    enPassantTarget = sourceTile - 8; 
+                                } else if (piece == 9 && clickedIndex - sourceTile == 16) {
+                                    enPassantTarget = sourceTile + 8; 
+                                } else {
+                                    enPassantTarget = -1; 
+                                }
+                                
                                 currentTurn = (currentTurn == 1) ? 2 : 1;
+                                castling = false;
                             } else {
                                 System.out.println("ya move wong");
                             }
@@ -124,6 +152,7 @@ public class CreateBoard extends JPanel {
         if (piece == 1) { // White Pawn check
             int startCol = start % 8;
             int endCol = end % 8;
+            int colDiff = Math.abs(startCol - endCol);
 
             if (startCol == endCol && board[end] == 0) {
                 if (start - end == 8) return true;
@@ -131,7 +160,11 @@ public class CreateBoard extends JPanel {
             }
 
             if (start - end == 7 || start - end == 9) {
-                if (Math.abs((start % 8) - (end % 8)) == 1 && board[end] != 0) return true;
+                if (colDiff == 1) {
+                    if (board[end] != 0) return true;
+                    
+                    if (end == enPassantTarget) return true;
+                }
             }
 
             return false;
@@ -140,6 +173,7 @@ public class CreateBoard extends JPanel {
         if (piece == 9) { // Black Pawn check
             int startCol = start % 8;
             int endCol = end % 8;
+            int colDiff = Math.abs(startCol - endCol);
 
             if (startCol == endCol && board[end] == 0) {
                 if (end - start == 8) return true;
@@ -148,6 +182,14 @@ public class CreateBoard extends JPanel {
 
             if (end - start == 7 || end - start == 9) {
                 if (Math.abs((start % 8) - (end % 8)) == 1 && board[end] != 0) return true;
+            }
+
+            if (end - start == 7 || end - start == 9) {
+                if (colDiff == 1) {
+                    if (board[end] != 0) return true;
+                    
+                    if (end == enPassantTarget) return true;
+                }
             }
 
             return false;
@@ -191,10 +233,74 @@ public class CreateBoard extends JPanel {
             int colDiff = Math.abs((start % 8) - (end % 8));
             int rowDiff = Math.abs((start / 8) - (end / 8));
 
+            if (piece == 6 && canCastleWhite && start == 60) { // White
+                if (end == 62 && board[61] == 0 && board[62] == 0) { 
+                    castling = true;
+                    canCastleWhite = false; 
+                    return true;
+                }
+                if (end == 58 && board[59] == 0 && board[58] == 0 && board[57] == 0) { 
+                    castling = true;
+                    canCastleWhite = false;
+                    return true;
+                }
+            }
+
+            if (piece == 14 && canCastleBlack && start == 4) { // Black
+                if (end == 6 && board[5] == 0 && board[6] == 0) { 
+                    castling = true;
+                    canCastleBlack = false;
+                    return true;
+                }
+                if (end == 2 && board[3] == 0 && board[2] == 0 && board[1] == 0) {
+                    castling = true;
+                    canCastleBlack = false;
+                    return true;
+                }
+            }
+
+            if (colDiff <= 1 && rowDiff <= 1) {
+                if (piece == 6) {
+                    canCastleWhite = false;
+                } else {
+                    canCastleBlack = false;
+                }
+            }
+
             return colDiff <= 1 && rowDiff <= 1;
         }
 
         return true;
+    }
+
+    public void castleKing(boolean white) {
+        if (white) {
+            board[63] = 0;
+            board[62] = 6;
+            board[61] = 4;
+            board[60] = 0;
+        } else {
+            board[4] = 0;
+            board[7] = 0;
+            board[6] = 14;
+            board[5] = 12;
+        }
+    }
+
+    public void castleQueen(boolean white) {
+        if (white) {
+            board[56] = 0;  
+            board[57] = 0;  
+            board[58] = 6;  
+            board[59] = 4;  
+            board[60] = 0;  
+        } else {
+            board[0] = 0;
+            board[1] = 0;
+            board[2] = 14;  
+            board[3] = 12; 
+            board[4] = 0;   
+        }
     }
 
     public boolean isPathClear(int start, int end) {
