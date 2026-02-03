@@ -329,5 +329,9 @@ public class CreateBoard extends JPanel {
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         frame.setLocationRelativeTo(null);
         frame.setVisible(true);
+
+        EngineBridge bridge = new EngineBridge("./Main");
+        bridge.startListening();
+        bridge.sendCommand("hello");
     }
 }

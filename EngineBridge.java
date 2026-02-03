@@ -5,6 +5,7 @@ public class EngineBridge {
     private PrintWriter writer; // write/output to cpp
     private BufferedReader reader; // read/input from cpp
 
+    // executable path -> compiled exe or process file
     public EngineBridge(String executablePath) {
         try {
             engineProcess = new ProcessBuilder(executablePath).start();
