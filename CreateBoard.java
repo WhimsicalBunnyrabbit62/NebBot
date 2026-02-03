@@ -322,6 +322,78 @@ public class CreateBoard extends JPanel {
         return true;
     }
 
+    public String getFen() {
+        StringBuilder fen = new StringBuilder();
+
+        // inscribe the board into fen
+        for (int row = 0; row < 8; row++) {
+            int emptyCount = 0;
+
+            for (int col = 0; col < 8; col++) {
+                int piece = board[row * 8 + col];
+                if (piece == 0) {
+                    emptyCount++;
+                } else {
+                    if (emptyCount > 0) {
+                        fen.append(emptyCount);
+                        emptyCount = 0;
+                    }
+                    fen.append(getCharFromPiece(piece));
+                }
+            }
+
+            if (emptyCount > 0) fen.append(emptyCount);
+            if (row < 7) fen.append("/");
+        }
+
+        fen.append(currentTurn == 1 ? "w" : "b"); // fen move
+
+        // fen castling rights
+        boolean hasCastle = false;
+        if (canCastleWhite) {
+            fen.append("KQ");
+            hasCastle = true;
+        } 
+        if (canCastleBlack) {
+            fen.append("kq");
+            hasCastle = true;
+        }
+        if (!hasCastle) fen.append("-");
+
+
+        // fen en passant
+        fen.append(" ");
+        if (enPassantTarget != -1) {
+            fen.append(indexToAlgebraic(enPassantTarget));
+        } else {
+            fen.append("-");
+        }
+        
+        // 50 move rule clock and full move clock (increment every black turn)
+        fen.append(" 0 1");
+
+        return fen.toString();
+    }
+
+    // index in array to algebraic notation i.e. e4 or d5 etc
+    public String indexToAlgebraic(int index) {
+        int file = index % 8;
+        int rank = 8 - (index / 8);
+        char fileChar = (char) ('a' + file);
+
+        return "" + fileChar + rank;
+    }
+
+    private char getCharFromPiece(int piece) {
+        switch (piece) {
+            case 1: return 'P'; case 2: return 'N'; case 3: return 'B';
+            case 4: return 'R'; case 5: return 'Q'; case 6: return 'K';
+            case 9: return 'p'; case 10: return 'n'; case 11: return 'b';
+            case 12: return 'r'; case 13: return 'q'; case 14: return 'k';
+            default: return ' ';
+        }
+    }
+
     public static void main(String[] args) {
         JFrame frame = new JFrame("chess display");
         frame.add(new CreateBoard());
@@ -329,9 +401,12 @@ public class CreateBoard extends JPanel {
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         frame.setLocationRelativeTo(null);
         frame.setVisible(true);
-
+        
+        CreateBoard game = new CreateBoard();
+        String currentPosition = game.getFen();
+        
         EngineBridge bridge = new EngineBridge("./Main");
         bridge.startListening();
-        bridge.sendCommand("hello");
+        bridge.sendCommand("position fen: " + currentPosition);
     }
 }

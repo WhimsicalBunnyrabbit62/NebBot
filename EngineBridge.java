@@ -56,15 +56,6 @@ public class EngineBridge {
         }
     }
 
-    // index in array to algebraic notation i.e. e4 or d5 etc
-    public String indexToAlgebraic(int index) {
-        int file = index % 8;
-        int rank = 8 - (index / 8);
-        char fileChar = (char) ('a' + file);
-
-        return "" + fileChar + rank;
-    }
-
     public int[] moveToIndices(String move) {
         int startFile = move.charAt(0) - 'a';
         int startRank = 8 - Character.getNumericValue(move.charAt(1));
