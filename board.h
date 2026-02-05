@@ -19,6 +19,7 @@ public:
     void unmakeMove(Move m, int capturedPiece, int oldEP, bool oldWKS, bool oldWQS, bool oldBKS, bool oldBQS);
 
     void loadFromFen(std::string fen);
+    int charToPiece(char c);
 };
 
 #endif

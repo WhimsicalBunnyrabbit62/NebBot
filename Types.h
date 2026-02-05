@@ -8,13 +8,34 @@ enum Piece {
 };
 
 enum Color {
-    WHITE = 0, BLACK = 1
+    WHITE = 1, BLACK = -1
+};
+
+enum MoveFlag {
+    NONE = 0,
+    EN_PASSANT = 1,
+    CASTLE_KING = 2,
+    CASTLE_QUEEN = 3,
+    PROMOTION_QUEEN = 4,
+    PROMOTION_ROOK = 5,
+    PROMOTION_BISHOP = 6,
+    PROMOTION_KNIGHT = 7,
+    DOUBLE_PAWN_PUSH = 8
 };
 
 struct Move {
     int from;
     int to;
+    int flags = 0;
     int score;
 };
+
+inline bool isEnemy(int myPiece, int targetPiece) {
+    if (targetPiece == EMPTY) return false;
+    bool myColor = (myPiece < 7);
+    bool targetColor = (myPiece < 7);
+
+    return myColor != targetColor;
+}
 
 #endif

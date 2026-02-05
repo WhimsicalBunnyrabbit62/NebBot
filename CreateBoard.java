@@ -346,7 +346,7 @@ public class CreateBoard extends JPanel {
             if (row < 7) fen.append("/");
         }
 
-        fen.append(currentTurn == 1 ? "w" : "b"); // fen move
+        fen.append(" " + (currentTurn == 1 ? "w" : "b") + " "); // fen move
 
         // fen castling rights
         boolean hasCastle = false;
@@ -396,17 +396,20 @@ public class CreateBoard extends JPanel {
 
     public static void main(String[] args) {
         JFrame frame = new JFrame("chess display");
-        frame.add(new CreateBoard());
+        CreateBoard boardPanel = new CreateBoard();
+        frame.add(boardPanel);
         frame.setSize(640, 660); 
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         frame.setLocationRelativeTo(null);
         frame.setVisible(true);
-        
-        CreateBoard game = new CreateBoard();
-        String currentPosition = game.getFen();
-        
+    
+        String currentPosition = boardPanel.getFen();
+
         EngineBridge bridge = new EngineBridge("./Main");
         bridge.startListening();
-        bridge.sendCommand("position fen: " + currentPosition);
+
+        bridge.sendCommand("uci");
+        bridge.sendCommand("isready");
+        bridge.sendCommand("position fen " + currentPosition);
     }
 }
