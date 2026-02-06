@@ -2,7 +2,6 @@ import javax.swing.*;
 import java.awt.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
-import java.awt.image.TileObserver;
 import java.io.File;
 
 public class CreateBoard extends JPanel {
@@ -118,6 +117,12 @@ public class CreateBoard extends JPanel {
         bridge.sendCommand("go");
         new Thread(() -> {
             String bestMove = bridge.waitForBestMove();
+
+            if (bestMove == null || bestMove.contains("none")) {
+                System.out.println("GAME OVER: Engine has no moves.");
+                return;
+            }
+            
             SwingUtilities.invokeLater(() -> makeEngineMove(bestMove));
         }).start();
     }

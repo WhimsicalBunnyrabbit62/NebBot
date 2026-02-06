@@ -1,6 +1,5 @@
 #include "moveGen.h"
-
-
+#include <iostream>
 
 std::vector<Move> moveGen::generateMoves(Board& board) {
     std::vector<Move> pseudoMoves;
@@ -36,6 +35,7 @@ std::vector<Move> moveGen::generateMoves(Board& board) {
 
         board.makeMove(m);
         int kingSq = findKing(board, myColor);
+                
         if (!isSquareAttacked(kingSq, enemyColor, board)) {
             legalMoves.push_back(m);
         }
@@ -46,7 +46,13 @@ std::vector<Move> moveGen::generateMoves(Board& board) {
     return legalMoves;
 }
 
+std::string moveGen::toAlgebraic(int index) {
+    int file = index % 8;
+    int rank = 8 - (index / 8);
+    char fileChar = (char) ('a' + file);
 
+    return std::string(1, fileChar) + std::to_string(rank);
+}
 
 bool moveGen::isSquareAttacked(int targetSq, int attackerColor, Board& board) {
     // knight check
@@ -214,6 +220,9 @@ void moveGen::genSlidingMoves(int sq, Board& board, std::vector<Move>& moves, co
             if (!canMoveInDirection(target, offset)) break;
 
             target += offset;
+
+            if (target < 0 || target >= 64) break;
+
             int pieceAtTarget = board.squares[target];
 
             if (pieceAtTarget == EMPTY) {
@@ -236,8 +245,8 @@ void moveGen::genKingMoves(int sq, Board& board, std::vector<Move>& moves) {
     for (int offset: kingOffsets) {
         int target = sq + offset;
 
-        if (target >= 0 && target < 64 && isSafeJump(sq, target)) {
-            int pieceAtTarget = board.squares[sq];
+        if (target >= 0 && target < 64 && isSafeJumpKing(sq, target)) {
+            int pieceAtTarget = board.squares[target];
 
             if (pieceAtTarget == EMPTY || isEnemy(board.squares[sq], pieceAtTarget)) {
                 moves.push_back({sq, target});
@@ -304,7 +313,18 @@ bool moveGen::isSafeJump(int startSq, int targetSq) {
     int endFile = targetSq % 8;
     int endRank = targetSq / 8;
 
-    return std::abs(startFile - endFile) <= 2 && std::abs(startRank - endRank) <= 2;
+    int df = std::abs(startFile - endFile);
+    int dr = std::abs(startRank - endRank);
+    return (df == 1 && dr == 2) || (df == 2 && dr == 1);
+}
+
+bool moveGen::isSafeJumpKing(int startSq, int targetSq) {
+    int startFile = startSq % 8;
+    int startRank = startSq / 8;
+    int endFile = targetSq % 8;
+    int endRank = targetSq / 8;
+
+    return std::abs(startFile - endFile) <= 1 && std::abs(startRank - endRank) <= 1;
 }
 
 bool moveGen::attackedBySlider(int targetSq, int attackerColor, Board& board, const std::vector<int>& offsets, bool isRook) {
@@ -314,6 +334,7 @@ bool moveGen::attackedBySlider(int targetSq, int attackerColor, Board& board, co
             if (!canMoveInDirection(currentSq, offset)) break;
 
             currentSq += offset;
+            if (currentSq < 0 || currentSq >= 64) break;
             int piece = board.squares[currentSq];
 
             if (piece != EMPTY) {

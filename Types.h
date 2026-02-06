@@ -33,7 +33,7 @@ struct Move {
 inline bool isEnemy(int myPiece, int targetPiece) {
     if (targetPiece == EMPTY) return false;
     bool myColor = (myPiece < 7);
-    bool targetColor = (myPiece < 7);
+    bool targetColor = (targetPiece < 7);
 
     return myColor != targetColor;
 }
