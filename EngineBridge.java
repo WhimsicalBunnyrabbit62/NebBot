@@ -17,7 +17,7 @@ public class EngineBridge {
             reader = new BufferedReader(new InputStreamReader(engineProcess.getInputStream()));
             System.out.println("working!");
         } catch (IOException e) {
-            System.out.println("somting wong in setup");
+            System.out.println("something wrong setup: " + e.getMessage());
         }
     }
 
@@ -41,12 +41,28 @@ public class EngineBridge {
                     handleEngineResponse(line);
                 }
             } catch (IOException e) {
-                System.out.println("somting wong in listener");
+                System.out.println("something wrong listener: " + e.getMessage());
             }
         });
 
         listenerThread.setDaemon(true);
         listenerThread.start();
+    }
+
+    public String waitForBestMove() {
+        try {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                System.out.println("C++ says: " + line); 
+                
+                if (line.startsWith("bestmove")) {
+                    return line.split(" ")[1];
+                }
+            }
+        } catch (IOException e) {
+            System.out.println("Error reading from engine: " + e.getMessage());
+        }
+        return null;
     }
 
     private void handleEngineResponse(String response) {

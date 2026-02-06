@@ -9,11 +9,12 @@ public class CreateBoard extends JPanel {
     private final int TILESIZE = 80;
     private int selectedTile = -1;
     private int sourceTile = -1;
-    private int currentTurn = 1;
+    private int currentTurn = 1; // 1 white : -1 black
     private boolean canCastleWhite = true;
     private boolean canCastleBlack = true;
     private boolean castling = false;
     private int enPassantTarget = -1;
+    private EngineBridge bridge = new EngineBridge("./chess_engine");
 
     private int[] board = {
         12, 10, 11, 13, 14, 11, 10, 12, 
@@ -30,72 +31,95 @@ public class CreateBoard extends JPanel {
     public CreateBoard() {
         loadImages();
 
+
+        //bridge.startListening();
+        bridge.sendCommand("uci");
+        bridge.sendCommand("isready");
+
         addMouseListener(new MouseAdapter() {
             @Override
             public void mousePressed(MouseEvent e) {
                 int col = e.getX() / TILESIZE;
                 int row = e.getY() / TILESIZE;
-                System.out.println("col: " + col + "row: " + row);
-
-                if (col >= 0 && col < 8 && row >= 0 && row < 8) {
+                //System.out.println("col: " + col + "row: " + row);
+                
+                if (currentTurn == 1) {
+                    if (col >= 0 && col < 8 && row >= 0 && row < 8) {
                     int clickedIndex = row * 8 + col;
                     
-                    if (sourceTile == -1) {
-                        if (board[clickedIndex] != 0) {
-                            boolean isWhitePiece = board[clickedIndex] < 7;
-                            boolean isWhiteTurn = (currentTurn == 1);
+                        if (sourceTile == -1) {
+                            if (board[clickedIndex] != 0) {
+                                boolean isWhitePiece = board[clickedIndex] < 7;
+                                boolean isWhiteTurn = (currentTurn == 1);
 
-                            if (isWhitePiece == isWhiteTurn) {
-                                sourceTile = clickedIndex;
-                            } else {
-                                System.out.println("its not your turn. buddy.");
-                            }
-                        } 
-                    } else {
-                        if (clickedIndex == sourceTile) {
-                            sourceTile = -1;
+                                if (isWhitePiece == isWhiteTurn) {
+                                    sourceTile = clickedIndex;
+                                } else {
+                                    System.out.println("its not your turn. buddy.");
+                                }
+                            } 
                         } else {
-                            if (moveLegal(sourceTile, clickedIndex)) {
-                                int piece = board[sourceTile];
+                            if (clickedIndex == sourceTile) {
+                                sourceTile = -1;
+                            } else {
+                                if (moveLegal(sourceTile, clickedIndex)) {
+                                    int piece = board[sourceTile];
 
-                                if ((board[sourceTile] == 1 || board[sourceTile] == 9) && clickedIndex == enPassantTarget) {
-                                    int victimIndex = (currentTurn == 1) ? clickedIndex + 8 : clickedIndex - 8;
-                                    board[victimIndex] = 0; 
-                                }
-
-                                if (castling) {
-                                    if (clickedIndex == 58 || clickedIndex == 2) {
-                                        castleQueen(currentTurn == 1);
-                                    } else {
-                                        castleKing(currentTurn == 1);
+                                    if ((board[sourceTile] == 1 || board[sourceTile] == 9) && clickedIndex == enPassantTarget) {
+                                        int victimIndex = (currentTurn == 1) ? clickedIndex + 8 : clickedIndex - 8;
+                                        board[victimIndex] = 0; 
                                     }
-                                } else {
-                                    board[clickedIndex] = board[sourceTile];
-                                    board[sourceTile] = 0;
-                                }
 
-                                if (piece == 1 && sourceTile - clickedIndex == 16) {
-                                    enPassantTarget = sourceTile - 8; 
-                                } else if (piece == 9 && clickedIndex - sourceTile == 16) {
-                                    enPassantTarget = sourceTile + 8; 
+                                    if (castling) {
+                                        if (clickedIndex == 58 || clickedIndex == 2) {
+                                            castleQueen(currentTurn == 1);
+                                        } else {
+                                            castleKing(currentTurn == 1);
+                                        }
+                                    } else {
+                                        board[clickedIndex] = board[sourceTile];
+                                        board[sourceTile] = 0;
+                                    }
+
+                                    if (piece == 1 && sourceTile - clickedIndex == 16) {
+                                        enPassantTarget = sourceTile - 8; 
+                                    } else if (piece == 9 && clickedIndex - sourceTile == 16) {
+                                        enPassantTarget = sourceTile + 8; 
+                                    } else {
+                                        enPassantTarget = -1; 
+                                    }
+                                    
+                                    currentTurn = (currentTurn == 1) ? -1 : 1;
+                                    castling = false;
                                 } else {
-                                    enPassantTarget = -1; 
+                                    System.out.println("ya move wong");
                                 }
                                 
-                                currentTurn = (currentTurn == 1) ? 2 : 1;
+                                currentTurn = -1;
                                 castling = false;
-                            } else {
-                                System.out.println("ya move wong");
-                            }
+                                sourceTile = -1;
+                                repaint();
 
-                            sourceTile = -1;
+                                runEngineTurn();
+                            }
                         }
                     }
-                }
-                System.out.println("Selected: " + selectedTile);
+                } 
+                
+                //System.out.println("Selected: " + selectedTile);
                 repaint();
             }
         });
+    }
+
+    private void runEngineTurn() {
+        String fen = getFen();
+        bridge.sendCommand("position fen " + fen);
+        bridge.sendCommand("go");
+        new Thread(() -> {
+            String bestMove = bridge.waitForBestMove();
+            SwingUtilities.invokeLater(() -> makeEngineMove(bestMove));
+        }).start();
     }
 
     private void loadImages() {
@@ -394,6 +418,31 @@ public class CreateBoard extends JPanel {
         }
     }
 
+    public int algebraicToIndex(String square) {
+        int col = square.charAt(0) - 'a';
+        int row = '8' - square.charAt(1);
+
+        return row * 8 + col;
+    }
+
+    public void makeEngineMove(String moveString) {
+        String startSquare = moveString.substring(0, 2);
+        String endSquare = moveString.substring(2,4);
+
+        int start = algebraicToIndex(startSquare);
+        int end = algebraicToIndex(endSquare);
+
+        board[end] = board[start];
+        board[start] = 0;
+
+        if (board[end] == 1 && end < 8) board[end] = 5;
+        if (board[end] == 9 && end >= 56) board[end] = 13;
+
+        currentTurn = 1;
+        sourceTile = -1;
+
+        repaint();
+    }
     public static void main(String[] args) {
         JFrame frame = new JFrame("chess display");
         CreateBoard boardPanel = new CreateBoard();
@@ -402,14 +451,5 @@ public class CreateBoard extends JPanel {
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         frame.setLocationRelativeTo(null);
         frame.setVisible(true);
-    
-        String currentPosition = boardPanel.getFen();
-
-        EngineBridge bridge = new EngineBridge("./Main");
-        bridge.startListening();
-
-        bridge.sendCommand("uci");
-        bridge.sendCommand("isready");
-        bridge.sendCommand("position fen " + currentPosition);
     }
 }
