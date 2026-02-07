@@ -6,6 +6,17 @@ import java.io.File;
 
 public class CreateBoard extends JPanel {
     private final int TILESIZE = 80;
+    private static final int WHITE = 1;
+    private static final int BLACK = -1;
+    private static final int MOVE_NONE = 0;
+    private static final int EN_PASSANT = 1;
+    private static final int CASTLE_KING = 2;
+    private static final int CASTLE_QUEEN = 3;
+    private static final int PROMOTION_QUEEN = 4;
+    private static final int PROMOTION_ROOK = 5;
+    private static final int PROMOTION_BISHOP = 6;
+    private static final int PROMOTION_KNIGHT = 7;
+    private static final int DOUBLE_PAWN_PUSH = 8;
     private int selectedTile = -1;
     private int sourceTile = -1;
     private int currentTurn = 1; // 1 white : -1 black
@@ -14,6 +25,8 @@ public class CreateBoard extends JPanel {
     private boolean castling = false;
     private int enPassantTarget = -1;
     private EngineBridge bridge = new EngineBridge("./chess_engine");
+
+    int flags = 0;
 
     private int[] board = {
         12, 10, 11, 13, 14, 11, 10, 12, 
@@ -62,44 +75,38 @@ public class CreateBoard extends JPanel {
                                 sourceTile = -1;
                             } else {
                                 if (moveLegal(sourceTile, clickedIndex)) {
-                                    int piece = board[sourceTile];
+                                    int myColor = currentTurn;
+                                    int enemyColor = (myColor == WHITE) ? BLACK : WHITE;
+                                    int capturedPiece = board[clickedIndex];
+                                    int oldEP = enPassantTarget;
+                                    boolean oldCW = canCastleWhite;
+                                    boolean oldCB = canCastleBlack;
+                                    int flags = computeMoveFlags(sourceTile, clickedIndex, board[sourceTile], capturedPiece);
 
-                                    if ((board[sourceTile] == 1 || board[sourceTile] == 9) && clickedIndex == enPassantTarget) {
-                                        int victimIndex = (currentTurn == 1) ? clickedIndex + 8 : clickedIndex - 8;
-                                        board[victimIndex] = 0; 
+                                    makeHumanMove(sourceTile, clickedIndex);
+                                    if (flags >= PROMOTION_QUEEN && flags <= PROMOTION_KNIGHT) {
+                                        flags = promotionFlagFromPiece(board[clickedIndex]);
                                     }
 
-                                    if (castling) {
-                                        if (clickedIndex == 58 || clickedIndex == 2) {
-                                            castleQueen(currentTurn == 1);
-                                        } else {
-                                            castleKing(currentTurn == 1);
-                                        }
-                                    } else {
-                                        board[clickedIndex] = board[sourceTile];
-                                        board[sourceTile] = 0;
+                                    int kingSq = findKing(myColor);
+                                    if (kingSq != -1 && isSquareAttacked(kingSq, enemyColor)) {
+                                        unmakeHumanMove(sourceTile, clickedIndex, flags, capturedPiece, oldEP, oldCW, oldCB);
+                                        System.out.println("ya move wong");
+                                        castling = false;
+                                        sourceTile = -1;
+                                        repaint();
+                                        return;
                                     }
-
-                                    if (piece == 1 && sourceTile - clickedIndex == 16) {
-                                        enPassantTarget = sourceTile - 8; 
-                                    } else if (piece == 9 && clickedIndex - sourceTile == 16) {
-                                        enPassantTarget = sourceTile + 8; 
-                                    } else {
-                                        enPassantTarget = -1; 
-                                    }
-                                    
-                                    currentTurn = (currentTurn == 1) ? -1 : 1;
-                                    castling = false;
                                 } else {
                                     System.out.println("ya move wong");
                                 }
                                 
-                                currentTurn = -1;
+                                
                                 castling = false;
                                 sourceTile = -1;
                                 repaint();
 
-                                runEngineTurn();
+                                if (currentTurn == -1) runEngineTurn();
                             }
                         }
                     }
@@ -109,6 +116,116 @@ public class CreateBoard extends JPanel {
                 repaint();
             }
         });
+    }
+
+    public void makeHumanMove(int sourceTile, int clickedIndex) {
+        int piece = board[sourceTile];
+        boolean isPromotionMove = (piece == 1 && clickedIndex < 8) || (piece == 9 && clickedIndex >= 56);
+
+        if ((board[sourceTile] == 1 || board[sourceTile] == 9) && clickedIndex == enPassantTarget) {
+            int victimIndex = (currentTurn == 1) ? clickedIndex + 8 : clickedIndex - 8;
+            board[victimIndex] = 0; 
+        }
+
+        if (castling) {
+            if (clickedIndex == 58 || clickedIndex == 2) {
+                castleQueen(currentTurn == 1);
+            } else {
+                castleKing(currentTurn == 1);
+            }
+        } else {
+            board[clickedIndex] = board[sourceTile];
+            board[sourceTile] = 0;
+        }
+
+        if (isPromotionMove) {
+            int promoteTo = choosePromotionPiece(currentTurn);
+            board[clickedIndex] = promoteTo;
+        }
+
+        if (piece == 1 && sourceTile - clickedIndex == 16) {
+            enPassantTarget = sourceTile - 8; 
+        } else if (piece == 9 && clickedIndex - sourceTile == 16) {
+            enPassantTarget = sourceTile + 8; 
+        } else {
+            enPassantTarget = -1; 
+        }
+        currentTurn = (currentTurn == 1) ? -1 : 1;
+        castling = false;
+    }
+
+    public void unmakeHumanMove(int from, int to, int flags, int capturedPiece, int oldEP, boolean oldCanCastleWhite, boolean oldCanCastleBlack) {
+        currentTurn = (currentTurn == 1) ? -1 : 1;
+
+        if (flags >= PROMOTION_QUEEN && flags <= PROMOTION_KNIGHT) {
+            board[from] = (currentTurn == WHITE) ? 1 : 9;
+        } else {
+            board[from] = board[to];
+        }
+
+        board[to] = capturedPiece;
+
+        if (flags == EN_PASSANT) {
+            board[to] = 0;
+            int victimSq = (currentTurn == WHITE) ? to + 8 : to - 8;
+            board[victimSq] = (currentTurn == WHITE) ? 9 : 1;
+        } else if (flags == CASTLE_KING) {
+            if (currentTurn == WHITE) {
+                board[63] = 4;
+                board[61] = 0;
+            } else {
+                board[7] = 12;
+                board[5] = 0;
+            }
+        } else if (flags == CASTLE_QUEEN) {
+            if (currentTurn == WHITE) {
+                board[56] = 4;
+                board[59] = 0;
+            } else {
+                board[0] = 12;
+                board[3] = 0;
+            }
+        }
+
+        enPassantTarget = oldEP;
+        canCastleWhite = oldCanCastleWhite;
+        canCastleBlack = oldCanCastleBlack;
+    }
+
+    private int choosePromotionPiece(int color) {
+        String[] options = {"Queen", "Rook", "Bishop", "Knight"};
+        int choice = JOptionPane.showOptionDialog(
+                this,
+                "Promote pawn to:",
+                "Promotion",
+                JOptionPane.DEFAULT_OPTION,
+                JOptionPane.QUESTION_MESSAGE,
+                null,
+                options,
+                options[0]
+        );
+
+        if (choice < 0) choice = 0; // default to queen if dialog closed
+
+        if (color == WHITE) {
+            switch (choice) {
+                case 1: return 4; // Rook
+                case 2: return 3; // Bishop
+                case 3: return 2; // Knight
+                default: return 5; // Queen
+            }
+        } else {
+            switch (choice) {
+                case 1: return 12; // Rook
+                case 2: return 11; // Bishop
+                case 3: return 10; // Knight
+                default: return 13; // Queen
+            }
+        }
+    }
+
+    public void unmakeHumanMove(int sourceTile, int clickedIndex, int capturedPiece, int oldEP, boolean WKS, boolean WQS, boolean BKS, boolean BQS, int flags) {
+        currentTurn = (currentTurn == 1) ? -1 : 1;
     }
 
     private void runEngineTurn() {
@@ -122,7 +239,7 @@ public class CreateBoard extends JPanel {
                 System.out.println("GAME OVER: Engine has no moves.");
                 return;
             }
-            
+
             SwingUtilities.invokeLater(() -> makeEngineMove(bestMove));
         }).start();
     }
@@ -300,6 +417,128 @@ public class CreateBoard extends JPanel {
         }
 
         return true;
+    }
+
+
+
+    private boolean isSquareAttacked(int targetSq, int attackerColor) {
+        // knight check
+        int[] knightOffsets = {-17, -15, -10, -6, 6, 10, 15, 17};
+        int enemyKnight = (attackerColor == WHITE) ? 2 : 10;
+        for (int offset : knightOffsets) {
+            int sq = targetSq + offset;
+            if (sq >= 0 && sq < 64 && isSafeJump(sq, targetSq)) {
+                if (board[sq] == enemyKnight) return true;
+            }
+        }
+
+        // sliding check
+        if (attackedBySlider(targetSq, attackerColor, new int[]{-8, 8, -1, 1}, true)) return true;
+        if (attackedBySlider(targetSq, attackerColor, new int[]{-9, -7, 7, 9}, false)) return true;
+
+        // pawn check
+        int enemyPawn = (attackerColor == WHITE) ? 1 : 9;
+        int[] pawnOffsets = (attackerColor == WHITE) ? new int[]{7, 9} : new int[]{-7, -9};
+        for (int offset : pawnOffsets) {
+            int sq = targetSq + offset;
+            if (sq >= 0 && sq < 64 && Math.abs((sq % 8) - (targetSq % 8)) == 1) {
+                if (board[sq] == enemyPawn) return true;
+            }
+        }
+
+        // king check
+        int enemyKing = (attackerColor == WHITE) ? 6 : 14;
+        int[] kingOffsets = {-9, -8, -7, -1, 1, 7, 8, 9};
+        for (int offset : kingOffsets) {
+            int sq = targetSq + offset;
+            if (sq >= 0 && sq < 64 && Math.abs((sq % 8) - (targetSq % 8)) <= 1) {
+                if (board[sq] == enemyKing) return true;
+            }
+        }
+
+        return false;
+    }
+
+    private boolean canMoveInDirection(int sq, int offset) {
+        int file = sq % 8;
+        if (file == 7 && (offset == 1 || offset == -7 || offset == 9)) return false;
+        if (file == 0 && (offset == -1 || offset == 7 || offset == -9)) return false;
+        return true;
+    }
+
+    private boolean isSafeJump(int startSq, int targetSq) {
+        int startFile = startSq % 8;
+        int startRank = startSq / 8;
+        int endFile = targetSq % 8;
+        int endRank = targetSq / 8;
+
+        int df = Math.abs(startFile - endFile);
+        int dr = Math.abs(startRank - endRank);
+        return (df == 1 && dr == 2) || (df == 2 && dr == 1);
+    }
+
+    private boolean attackedBySlider(int targetSq, int attackerColor, int[] offsets, boolean isRook) {
+        for (int offset : offsets) {
+            int currentSq = targetSq;
+            while (true) {
+                if (!canMoveInDirection(currentSq, offset)) break;
+                currentSq += offset;
+                if (currentSq < 0 || currentSq >= 64) break;
+
+                int piece = board[currentSq];
+                if (piece != 0) {
+                    boolean isEnemyPiece = (attackerColor == WHITE && piece < 7) || (attackerColor == BLACK && piece > 8);
+                    if (isEnemyPiece) {
+                        if (isRook) {
+                            if (piece == 4 || piece == 12 || piece == 5 || piece == 13) return true;
+                        } else {
+                            if (piece == 3 || piece == 11 || piece == 5 || piece == 13) return true;
+                        }
+                    }
+                    break;
+                }
+            }
+        }
+        return false;
+    }
+
+    private int findKing(int color) {
+        int targetKing = (color == WHITE) ? 6 : 14;
+        for (int i = 0; i < 64; i++) {
+            if (board[i] == targetKing) return i;
+        }
+        return -1;
+    }
+
+    private int computeMoveFlags(int from, int to, int piece, int capturedPiece) {
+        if ((piece == 1 || piece == 9) && to == enPassantTarget && capturedPiece == 0) {
+            return EN_PASSANT;
+        }
+        if ((piece == 1 && from - to == 16) || (piece == 9 && to - from == 16)) {
+            return DOUBLE_PAWN_PUSH;
+        }
+        if (piece == 6 || piece == 14) {
+            if (to == 62 || to == 6) return CASTLE_KING;
+            if (to == 58 || to == 2) return CASTLE_QUEEN;
+        }
+        if ((piece == 1 && to < 8) || (piece == 9 && to >= 56)) {
+            return PROMOTION_QUEEN;
+        }
+        return MOVE_NONE;
+    }
+
+    private int promotionFlagFromPiece(int piece) {
+        switch (piece) {
+            case 5: return PROMOTION_QUEEN;
+            case 4: return PROMOTION_ROOK;
+            case 3: return PROMOTION_BISHOP;
+            case 2: return PROMOTION_KNIGHT;
+            case 13: return PROMOTION_QUEEN;
+            case 12: return PROMOTION_ROOK;
+            case 11: return PROMOTION_BISHOP;
+            case 10: return PROMOTION_KNIGHT;
+            default: return PROMOTION_QUEEN;
+        }
     }
 
     public void castleKing(boolean white) {

@@ -82,7 +82,7 @@ void Board::loadFromFen(std::string fen) {
         }
     }
 
-    turn = (activeColor == "w") ? 1 : 2;
+    turn = (activeColor == "w") ? WHITE : BLACK;
 }
 
 int Board::charToPiece(char c) {
