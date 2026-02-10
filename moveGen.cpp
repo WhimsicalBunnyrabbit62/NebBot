@@ -74,7 +74,7 @@ bool moveGen::isSquareAttacked(int targetSq, int attackerColor, Board& board) {
     //pawn check
     int enemyPawn = (attackerColor == 1) ? W_PAWN : B_PAWN;
 
-    std::vector<int> pawnOffsets = (attackerColor == 1) ? std::vector<int>{7, 9} : std::vector<int>{-7, -9};
+    std::vector<int> pawnOffsets = (attackerColor == 1) ? std::vector<int>{-7, -9} : std::vector<int>{7, 9};
     for (int offset : pawnOffsets) {
         int sq = targetSq + offset;
 
@@ -107,7 +107,7 @@ void moveGen::genPawnMoves(int sq, Board& board, std::vector<Move>& moves) {
     if (board.turn == WHITE) {
         int forward = sq - 8;
         
-        if (forward > 0 && board.squares[forward] == EMPTY) {
+        if (forward >= 0 && board.squares[forward] == EMPTY) {
             if (rank == 1) {
                 addPromotionMoves(sq, forward, moves);
             } else {
@@ -128,7 +128,10 @@ void moveGen::genPawnMoves(int sq, Board& board, std::vector<Move>& moves) {
                     moves.push_back({sq, diagLeft});
                 }
             } else if (diagLeft == board.enPassantSq) {
-                moves.push_back({sq, diagLeft, EN_PASSANT});
+                int victimSq = diagLeft + 8;
+                if (victimSq >= 0 && victimSq < 64 && board.squares[victimSq] == B_PAWN) {
+                    moves.push_back({sq, diagLeft, EN_PASSANT});
+                }
             }
         }
 
@@ -141,7 +144,10 @@ void moveGen::genPawnMoves(int sq, Board& board, std::vector<Move>& moves) {
                     moves.push_back({sq, diagRight});
                 }
             } else if (diagRight == board.enPassantSq) {
-                moves.push_back({sq, diagRight, EN_PASSANT});
+                int victimSq = diagRight + 8;
+                if (victimSq >= 0 && victimSq < 64 && board.squares[victimSq] == B_PAWN) {
+                    moves.push_back({sq, diagRight, EN_PASSANT});
+                }
             }
         }
     }
@@ -171,7 +177,10 @@ void moveGen::genPawnMoves(int sq, Board& board, std::vector<Move>& moves) {
                     moves.push_back({sq, diagLeft});
                 }
             } else if (diagLeft == board.enPassantSq) {
-                moves.push_back({sq, diagLeft, EN_PASSANT});
+                int victimSq = diagLeft - 8;
+                if (victimSq >= 0 && victimSq < 64 && board.squares[victimSq] == W_PAWN) {
+                    moves.push_back({sq, diagLeft, EN_PASSANT});
+                }
             }
         }
 
@@ -184,7 +193,10 @@ void moveGen::genPawnMoves(int sq, Board& board, std::vector<Move>& moves) {
                     moves.push_back({sq, diagRight});
                 }
             } else if (diagRight == board.enPassantSq) {
-                moves.push_back({sq, diagRight, EN_PASSANT});
+                int victimSq = diagRight - 8;
+                if (victimSq >= 0 && victimSq < 64 && board.squares[victimSq] == W_PAWN) {
+                    moves.push_back({sq, diagRight, EN_PASSANT});
+                }
             }
         }
     }
@@ -254,28 +266,28 @@ void moveGen::genKingMoves(int sq, Board& board, std::vector<Move>& moves) {
         }
     }
 
-    if (myColor == 1 && sq == 60) {
+    if (myColor == WHITE && sq == 60) {
         genCastlingMoves(sq, 1, board, moves);
-    } else if (myColor == 2 && sq == 4) {
+    } else if (myColor == BLACK && sq == 4) {
         genCastlingMoves(sq, 2, board, moves);
     }
 }
 
 void moveGen::genCastlingMoves(int sq, int color, Board& board, std::vector<Move>& moves) {
-    int enemyColor = (color == 1) ? 2 : 1;
+    int enemyColor = (color == WHITE) ? BLACK : WHITE;
     if (isSquareAttacked(sq, enemyColor, board)) return;
 
     if (color == WHITE) {
         // king side white
         if (board.w_kingside && board.squares[61] == EMPTY && board.squares[62] == EMPTY) {
-            if (!isSquareAttacked(61, enemyColor, board)) {
+            if (!isSquareAttacked(61, enemyColor, board) && !isSquareAttacked(62, enemyColor, board)) {
                 moves.push_back({60, 62, CASTLE_KING});
             }
         }
 
         // queen side white
         if (board.w_queenside && board.squares[59] == EMPTY && board.squares[58] == EMPTY && board.squares[57] == EMPTY) {
-            if (!isSquareAttacked(59, enemyColor, board)) {
+            if (!isSquareAttacked(59, enemyColor, board) && !isSquareAttacked(58, enemyColor, board)) {
                 moves.push_back({60, 58, CASTLE_QUEEN});
             }
         }
@@ -284,14 +296,14 @@ void moveGen::genCastlingMoves(int sq, int color, Board& board, std::vector<Move
     if (color == BLACK) {
         // king side black
         if (board.b_kingside && board.squares[5] == EMPTY && board.squares[6] == EMPTY) {
-            if (!isSquareAttacked(5, enemyColor, board)) {
+            if (!isSquareAttacked(5, enemyColor, board) && !isSquareAttacked(6, enemyColor, board)) {
                 moves.push_back({4, 6, CASTLE_KING});
             }
         }
 
         // queen side black
         if (board.b_queenside && board.squares[3] == EMPTY && board.squares[2] == EMPTY && board.squares[1] == EMPTY) {
-            if (!isSquareAttacked(3, enemyColor, board)) {
+            if (!isSquareAttacked(3, enemyColor, board) && !isSquareAttacked(2, enemyColor, board)) {
                 moves.push_back({4, 2, CASTLE_QUEEN});
             }
         }

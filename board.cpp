@@ -1,4 +1,5 @@
 #include "board.h"
+#include <string>
 #include <sstream>
 
 Board::Board() {
@@ -18,10 +19,13 @@ void Board::makeMove(Move m) {
     squares[m.to] = piece;
     squares[m.from] = EMPTY;
 
-    if (m.flags == PROMOTION_QUEEN) {
-        squares[m.to] = (turn == WHITE) ? W_QUEEN : B_QUEEN;
-    } 
-    else if (m.flags == EN_PASSANT) {
+    if (m.flags == PROMOTION_QUEEN || m.flags == PROMOTION_ROOK ||
+        m.flags == PROMOTION_BISHOP || m.flags == PROMOTION_KNIGHT) {
+        if (m.flags == PROMOTION_QUEEN) squares[m.to] = (turn == WHITE) ? W_QUEEN : B_QUEEN;
+        else if (m.flags == PROMOTION_ROOK) squares[m.to] = (turn == WHITE) ? W_ROOK : B_ROOK;
+        else if (m.flags == PROMOTION_BISHOP) squares[m.to] = (turn == WHITE) ? W_BISHOP : B_BISHOP;
+        else if (m.flags == PROMOTION_KNIGHT) squares[m.to] = (turn == WHITE) ? W_KNIGHT : B_KNIGHT;
+    } else if (m.flags == EN_PASSANT) {
         int victimSq = (turn == WHITE) ? m.to + 8 : m.to - 8;
         squares[victimSq] = EMPTY;
     } 
@@ -32,6 +36,10 @@ void Board::makeMove(Move m) {
         if (turn == WHITE) { squares[61] = W_ROOK; squares[63] = EMPTY; }
         else { squares[5] = B_ROOK; squares[7] = EMPTY; }
     }
+    else if (m.flags == CASTLE_QUEEN) {
+        if (turn == WHITE) { squares[59] = W_ROOK; squares[56] = EMPTY; }
+        else { squares[3] = B_ROOK; squares[0] = EMPTY; }
+    }
 
     if (m.flags != DOUBLE_PAWN_PUSH) enPassantSq = -1;
     turn = (turn == WHITE) ? BLACK : WHITE; 
@@ -40,7 +48,8 @@ void Board::makeMove(Move m) {
 void Board::unmakeMove(Move m, int capturedPiece, int oldEP, bool oldWKS, bool oldWQS, bool oldBKS, bool oldBQS) {
     turn = (turn == WHITE) ? BLACK : WHITE;
 
-    if (m.flags == PROMOTION_QUEEN) {
+    if (m.flags == PROMOTION_QUEEN || m.flags == PROMOTION_ROOK ||
+        m.flags == PROMOTION_BISHOP || m.flags == PROMOTION_KNIGHT) {
         squares[m.from] = (turn == WHITE) ? W_PAWN : B_PAWN;
     } else {
         squares[m.from] = squares[m.to];
@@ -58,6 +67,12 @@ void Board::unmakeMove(Move m, int capturedPiece, int oldEP, bool oldWKS, bool o
         } else {
             squares[7] = B_ROOK; squares[5] = EMPTY;
         }
+    } else if (m.flags == CASTLE_QUEEN) {
+        if (turn == WHITE) {
+            squares[56] = W_ROOK; squares[59] = EMPTY;
+        } else {
+            squares[0] = B_ROOK; squares[3] = EMPTY;
+        }
     }
     enPassantSq = oldEP;
     w_kingside = oldWKS;
@@ -71,6 +86,26 @@ void Board::loadFromFen(std::string fen) {
     std::stringstream ss(fen);
     std::string position, activeColor, castling, enPassant;
     ss >> position >> activeColor >> castling >> enPassant;
+
+    if (castling.find("KQ") != std::string::npos) {
+        w_queenside = w_kingside = true;
+    } else {
+        w_queenside = w_kingside = false;
+    }
+
+    if (castling.find("kq") != std::string::npos) {
+        b_queenside = b_kingside = true;
+    } else {
+        b_queenside = b_kingside = false;
+    }
+
+    if (enPassant != "-") {
+        int col = enPassant[0] - 'a';
+        int row = '8' - enPassant[1];
+        enPassantSq = row * 8 + col;
+    } else {
+        enPassantSq = -1;
+    }
 
     int square = 0;
     for (char c : position) {

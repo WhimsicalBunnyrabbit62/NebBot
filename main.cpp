@@ -4,6 +4,8 @@
 #include <ctime>
 #include "board.h"
 #include "moveGen.h"
+#include "eval.h"
+#include "search.h"
 
 std::string toAlgebraic(int sq) {
     char file = 'a' + (sq % 8);
@@ -28,16 +30,24 @@ int main() {
         } else if (line.find("go") == 0) {
             std::vector<Move> moves = moveGen::generateMoves(board);
 
+            std::cout << "Evaluation: " << eval::evaluate(board) << std::endl;
+
             if (!moves.empty()) {
-                Move m = moves[rand() % moves.size()];
+                Move bestMove = search::findBestMove(2, board);
 
-                std::cout << "bestmove " << toAlgebraic(m.from) << toAlgebraic(m.to);
+                std::cout << "bestmove " << toAlgebraic(bestMove.from) << toAlgebraic(bestMove.to);
 
-                if (m.flags == PROMOTION_QUEEN) std::cout << "q";
+                if (bestMove.flags == PROMOTION_QUEEN) std::cout << "q";
                 std::cout << std::endl;
             } else {
                 std::cout << "bestmove none" << std::endl;
             }
+        } else if (line.rfind("perft", 0) == 0) {
+            int depth = 1;
+            if (line.size() > 6) {
+                depth = std::stoi(line.substr(6));
+            }
+            std::cout << "total moves: " << search::perft(depth, board) << std::endl;
         } else if (line == "quit") break;
     }
 

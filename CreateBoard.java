@@ -5,9 +5,12 @@ import java.awt.event.MouseEvent;
 import java.io.File;
 
 public class CreateBoard extends JPanel {
+    private int totalTurns = 1;
     private final int TILESIZE = 80;
+    // Numerated Turns
     private static final int WHITE = 1;
     private static final int BLACK = -1;
+    // Move Flags
     private static final int MOVE_NONE = 0;
     private static final int EN_PASSANT = 1;
     private static final int CASTLE_KING = 2;
@@ -20,11 +23,14 @@ public class CreateBoard extends JPanel {
     private int selectedTile = -1;
     private int sourceTile = -1;
     private int currentTurn = 1; // 1 white : -1 black
-    private boolean canCastleWhite = true;
-    private boolean canCastleBlack = true;
+    private boolean canCastleWhiteKing = true;
+    private boolean canCastleBlackKing = true;
+    private boolean canCastleWhiteQueen = true;
+    private boolean canCastleBlackQueen = true;
     private boolean castling = false;
     private int enPassantTarget = -1;
     private EngineBridge bridge = new EngineBridge("./chess_engine");
+    private boolean firstListener = true;
 
     int flags = 0;
 
@@ -44,9 +50,13 @@ public class CreateBoard extends JPanel {
         loadImages();
 
 
-        //bridge.startListening();
+        bridge.startListening(firstListener);
+        firstListener = false;
         bridge.sendCommand("uci");
         bridge.sendCommand("isready");
+        bridge.sendCommand("position fen rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
+        bridge.sendCommand("perft 2");
+
 
         addMouseListener(new MouseAdapter() {
             @Override
@@ -75,13 +85,21 @@ public class CreateBoard extends JPanel {
                                 sourceTile = -1;
                             } else {
                                 if (moveLegal(sourceTile, clickedIndex)) {
+                                    int piece = board[sourceTile];
                                     int myColor = currentTurn;
                                     int enemyColor = (myColor == WHITE) ? BLACK : WHITE;
                                     int capturedPiece = board[clickedIndex];
                                     int oldEP = enPassantTarget;
-                                    boolean oldCW = canCastleWhite;
-                                    boolean oldCB = canCastleBlack;
+                                    boolean oldCWK = canCastleWhiteKing;
+                                    boolean oldCBK = canCastleBlackKing;
+                                    boolean oldCWQ = canCastleWhiteQueen;
+                                    boolean oldCBQ = canCastleBlackQueen;
                                     int flags = computeMoveFlags(sourceTile, clickedIndex, board[sourceTile], capturedPiece);
+                                    
+                                    if (piece == 6 && castling == false) {
+                                        canCastleWhiteKing = false;
+                                        canCastleWhiteQueen = false;
+                                    }
 
                                     makeHumanMove(sourceTile, clickedIndex);
                                     if (flags >= PROMOTION_QUEEN && flags <= PROMOTION_KNIGHT) {
@@ -90,7 +108,7 @@ public class CreateBoard extends JPanel {
 
                                     int kingSq = findKing(myColor);
                                     if (kingSq != -1 && isSquareAttacked(kingSq, enemyColor)) {
-                                        unmakeHumanMove(sourceTile, clickedIndex, flags, capturedPiece, oldEP, oldCW, oldCB);
+                                        unmakeHumanMove(sourceTile, clickedIndex, flags, capturedPiece, oldEP, oldCWK, oldCBK, oldCWQ, oldCBQ);
                                         System.out.println("ya move wong");
                                         castling = false;
                                         sourceTile = -1;
@@ -106,7 +124,10 @@ public class CreateBoard extends JPanel {
                                 sourceTile = -1;
                                 repaint();
 
-                                if (currentTurn == -1) runEngineTurn();
+                                if (currentTurn == -1) {
+                                    runEngineTurn();
+                                    totalTurns++;
+                                }
                             }
                         }
                     }
@@ -126,13 +147,23 @@ public class CreateBoard extends JPanel {
             int victimIndex = (currentTurn == 1) ? clickedIndex + 8 : clickedIndex - 8;
             board[victimIndex] = 0; 
         }
+        
+        if (piece == 4 && !castling && sourceTile == 63) {
+            canCastleWhiteKing = false;
+        }
+
+        if (piece == 4 && !castling && sourceTile == 56) {
+            canCastleWhiteKing = false;
+        }
 
         if (castling) {
-            if (clickedIndex == 58 || clickedIndex == 2) {
+            if (clickedIndex == 58) {
                 castleQueen(currentTurn == 1);
             } else {
                 castleKing(currentTurn == 1);
             }
+            canCastleWhiteKing = false;
+            canCastleWhiteQueen = false;
         } else {
             board[clickedIndex] = board[sourceTile];
             board[sourceTile] = 0;
@@ -143,18 +174,14 @@ public class CreateBoard extends JPanel {
             board[clickedIndex] = promoteTo;
         }
 
-        if (piece == 1 && sourceTile - clickedIndex == 16) {
-            enPassantTarget = sourceTile - 8; 
-        } else if (piece == 9 && clickedIndex - sourceTile == 16) {
-            enPassantTarget = sourceTile + 8; 
-        } else {
-            enPassantTarget = -1; 
-        }
+        String fen = getFen();
+        bridge.sendCommand("position fen " + fen);
+
         currentTurn = (currentTurn == 1) ? -1 : 1;
         castling = false;
     }
 
-    public void unmakeHumanMove(int from, int to, int flags, int capturedPiece, int oldEP, boolean oldCanCastleWhite, boolean oldCanCastleBlack) {
+    public void unmakeHumanMove(int from, int to, int flags, int capturedPiece, int oldEP, boolean oldCanCastleWhiteKing, boolean oldCanCastleBlackKing, boolean oldCanCastleWhiteQueen, boolean oldCanCastleBlackQueen) {
         currentTurn = (currentTurn == 1) ? -1 : 1;
 
         if (flags >= PROMOTION_QUEEN && flags <= PROMOTION_KNIGHT) {
@@ -188,8 +215,10 @@ public class CreateBoard extends JPanel {
         }
 
         enPassantTarget = oldEP;
-        canCastleWhite = oldCanCastleWhite;
-        canCastleBlack = oldCanCastleBlack;
+        canCastleWhiteKing = oldCanCastleWhiteKing;
+        canCastleBlackKing = oldCanCastleBlackKing;
+        canCastleWhiteQueen = oldCanCastleWhiteQueen;
+        canCastleBlackQueen = oldCanCastleBlackQueen;
     }
 
     private int choosePromotionPiece(int color) {
@@ -229,10 +258,11 @@ public class CreateBoard extends JPanel {
     }
 
     private void runEngineTurn() {
-        String fen = getFen();
+        String fen = getFen();        
         bridge.sendCommand("position fen " + fen);
         bridge.sendCommand("go");
         new Thread(() -> {
+            bridge.sendCommand("perft 2");
             String bestMove = bridge.waitForBestMove();
 
             if (bestMove == null || bestMove.contains("none")) {
@@ -309,7 +339,10 @@ public class CreateBoard extends JPanel {
                 if (colDiff == 1) {
                     if (board[end] != 0) return true;
                     
-                    if (end == enPassantTarget) return true;
+                    if (end == enPassantTarget) {
+                        int victim = end + 8;
+                        if (victim >= 0 && victim < 64 && board[victim] == 9) return true;
+                    }
                 }
             }
 
@@ -327,14 +360,13 @@ public class CreateBoard extends JPanel {
             }
 
             if (end - start == 7 || end - start == 9) {
-                if (Math.abs((start % 8) - (end % 8)) == 1 && board[end] != 0) return true;
-            }
-
-            if (end - start == 7 || end - start == 9) {
                 if (colDiff == 1) {
                     if (board[end] != 0) return true;
                     
-                    if (end == enPassantTarget) return true;
+                    if (end == enPassantTarget) {
+                        int victim = end - 8;
+                        if (victim >= 0 && victim < 64 && board[victim] == 1) return true;
+                    }
                 }
             }
 
@@ -379,37 +411,21 @@ public class CreateBoard extends JPanel {
             int colDiff = Math.abs((start % 8) - (end % 8));
             int rowDiff = Math.abs((start / 8) - (end / 8));
 
-            if (piece == 6 && canCastleWhite && start == 60) { // White
+            if (piece == 6 && canCastleWhiteKing && start == 60) { // king
                 if (end == 62 && board[61] == 0 && board[62] == 0) { 
                     castling = true;
-                    canCastleWhite = false; 
+                    canCastleWhiteKing = false; 
+                    canCastleWhiteQueen = false;
                     return true;
                 }
+            }
+            
+            if (piece == 6 && canCastleWhiteQueen && start == 60) { // queen
                 if (end == 58 && board[59] == 0 && board[58] == 0 && board[57] == 0) { 
                     castling = true;
-                    canCastleWhite = false;
+                    canCastleWhiteQueen = false;
+                    canCastleWhiteKing = false;
                     return true;
-                }
-            }
-
-            if (piece == 14 && canCastleBlack && start == 4) { // Black
-                if (end == 6 && board[5] == 0 && board[6] == 0) { 
-                    castling = true;
-                    canCastleBlack = false;
-                    return true;
-                }
-                if (end == 2 && board[3] == 0 && board[2] == 0 && board[1] == 0) {
-                    castling = true;
-                    canCastleBlack = false;
-                    return true;
-                }
-            }
-
-            if (colDiff <= 1 && rowDiff <= 1) {
-                if (piece == 6) {
-                    canCastleWhite = false;
-                } else {
-                    canCastleBlack = false;
                 }
             }
 
@@ -518,8 +534,8 @@ public class CreateBoard extends JPanel {
             return DOUBLE_PAWN_PUSH;
         }
         if (piece == 6 || piece == 14) {
-            if (to == 62 || to == 6) return CASTLE_KING;
-            if (to == 58 || to == 2) return CASTLE_QUEEN;
+            if ((to == 62 || to == 6) && canCastleWhiteKing) return CASTLE_KING;
+            if ((to == 62 || to == 6) && canCastleWhiteQueen) return CASTLE_QUEEN;
         }
         if ((piece == 1 && to < 8) || (piece == 9 && to >= 56)) {
             return PROMOTION_QUEEN;
@@ -618,14 +634,23 @@ public class CreateBoard extends JPanel {
 
         // fen castling rights
         boolean hasCastle = false;
-        if (canCastleWhite) {
-            fen.append("KQ");
+        if (canCastleWhiteKing) {
+            fen.append("K");
             hasCastle = true;
         } 
-        if (canCastleBlack) {
-            fen.append("kq");
+        if (canCastleWhiteQueen) {
+            fen.append("Q");
+            hasCastle = true;
+        } 
+        if (canCastleBlackKing) {
+            fen.append("k");
             hasCastle = true;
         }
+        if (canCastleBlackQueen) {
+            fen.append("q");
+            hasCastle = true;
+        } 
+
         if (!hasCastle) fen.append("-");
 
 
@@ -638,7 +663,7 @@ public class CreateBoard extends JPanel {
         }
         
         // 50 move rule clock and full move clock (increment every black turn)
-        fen.append(" 0 1");
+        fen.append(" 0 " + totalTurns);
 
         return fen.toString();
     }
@@ -676,11 +701,21 @@ public class CreateBoard extends JPanel {
         int start = algebraicToIndex(startSquare);
         int end = algebraicToIndex(endSquare);
 
+        int movingPiece = board[start];
+
         board[end] = board[start];
         board[start] = 0;
 
         if (board[end] == 1 && end < 8) board[end] = 5;
         if (board[end] == 9 && end >= 56) board[end] = 13;
+
+        if (movingPiece == 1 && start - end == 16) {
+            enPassantTarget = start - 8;
+        } else if (movingPiece == 9 && end - start == 16) {
+            enPassantTarget = start + 8;
+        } else {
+            enPassantTarget = -1;
+        }
 
         currentTurn = 1;
         sourceTile = -1;

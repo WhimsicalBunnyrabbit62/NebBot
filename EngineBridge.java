@@ -1,9 +1,12 @@
 import java.io.*;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.LinkedBlockingQueue;
 
 public class EngineBridge {
     private Process engineProcess; // cpp connection
     private PrintWriter writer; // write/output to cpp
     private BufferedReader reader; // read/input from cpp
+    private final BlockingQueue<String> bestMoves = new LinkedBlockingQueue<>();
 
     // executable path -> compiled exe or process file
     public EngineBridge(String executablePath) {
@@ -30,7 +33,8 @@ public class EngineBridge {
         }
     }
 
-    public void startListening() {
+    public void startListening(boolean first) {
+        if (!first) return;
         // thread so ui doesn't stop updating
         Thread listenerThread = new Thread(() -> {
             try {
@@ -38,7 +42,12 @@ public class EngineBridge {
 
                 while ((line = reader.readLine()) != null) {
                     System.out.println("C++ says: " + line);
-                    handleEngineResponse(line);
+                    if (line.startsWith("bestmove")) {
+                        String[] parts = line.split(" ");
+                        if (parts.length > 1) {
+                            bestMoves.offer(parts[1]);
+                        }
+                    }
                 }
             } catch (IOException e) {
                 System.out.println("something wrong listener: " + e.getMessage());
@@ -51,25 +60,11 @@ public class EngineBridge {
 
     public String waitForBestMove() {
         try {
-            String line;
-            while ((line = reader.readLine()) != null) {
-                System.out.println("C++ says: " + line); 
-                
-                if (line.startsWith("bestmove")) {
-                    return line.split(" ")[1];
-                }
-            }
-        } catch (IOException e) {
-            System.out.println("Error reading from engine: " + e.getMessage());
+            return bestMoves.take();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
         }
         return null;
-    }
-
-    private void handleEngineResponse(String response) {
-        if (response.startsWith("bestmove")) {
-            String move = response.split(" ")[1];
-            System.out.println("engine says " + move + " is da best");
-        }
     }
 
     public int[] moveToIndices(String move) {
