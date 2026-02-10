@@ -7,6 +7,7 @@
 class search {
 public:
     static int explore(int depth, Board board, bool isMaximizing);
+    static int negamax(int depth, Board& board);
     static Move findBestMove(int depth, Board board);
     static uint64_t perft(int depth, Board& board);
 };

@@ -33,7 +33,7 @@ int main() {
             std::cout << "Evaluation: " << eval::evaluate(board) << std::endl;
 
             if (!moves.empty()) {
-                Move bestMove = search::findBestMove(2, board);
+                Move bestMove = search::findBestMove(4, board);
 
                 std::cout << "bestmove " << toAlgebraic(bestMove.from) << toAlgebraic(bestMove.to);
 
@@ -47,7 +47,7 @@ int main() {
             if (line.size() > 6) {
                 depth = std::stoi(line.substr(6));
             }
-            std::cout << "total moves: " << search::perft(depth, board) << std::endl;
+            std::cout << "total positions: " << search::perft(depth, board) << std::endl;
         } else if (line == "quit") break;
     }
 
