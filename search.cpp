@@ -6,8 +6,11 @@
 #include <vector>
 #include <iostream>
 #include <climits>
+#include <chrono>
 
 Move search::findBestMove(int depth, Board board) {
+    auto start = std::chrono::steady_clock::now();
+
     Move bestMove;
     std::vector<Move> allMoves = moveGen::generateMoves(board);
 
@@ -22,26 +25,29 @@ Move search::findBestMove(int depth, Board board) {
         bool oldBQS = board.b_queenside;
 
         board.makeMove(m);
-        int eval = -negamax(depth-1, board);
-        //std::cout << "cur eval: " << eval << std::endl;
+        int eval = -negamax(depth-1, board, INT_MIN, INT_MAX);
         board.unmakeMove(m, capturedPiece, oldEP, oldWKS, oldWQS, oldBKS, oldBQS);
 
         if (eval >= bestEval) {
             bestEval = eval;
             bestMove = m;
-            //std::cout << "best eval: " << bestEval << std::endl;
         }
     }
+
+    auto end = std::chrono::steady_clock::now();
+    auto diff = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+
+    std::cout << "time (ms): " << diff.count() << std::endl;
 
     return bestMove;
 }
 
-int search::negamax(int depth, Board& board) {
+int search::negamax(int depth, Board& board, int alpha, int beta) {
     if (depth == 0) {
         return eval::evaluate(board) * board.turn;
     }
 
-    int maxScore = INT_MIN;
+    int best = INT_MIN;
     std::vector<Move> moves = moveGen::generateMoves(board);
 
     for (Move m : moves) {
@@ -53,61 +59,16 @@ int search::negamax(int depth, Board& board) {
         bool oldBQS = board.b_queenside;
 
         board.makeMove(m);
-        int score = -negamax(depth-1, board);
+        int score = -negamax(depth-1, board, -beta, -alpha);
         board.unmakeMove(m, capturedPiece, oldEP, oldWKS, oldWQS, oldBKS, oldBQS);
 
-        if (score > maxScore) maxScore = score;
+        best = std::max(best, score);
+        alpha = std::max(alpha, score);
+
+        if (alpha > beta) break;
     }
 
-    return maxScore;
-}
-
-int search::explore(int depth, Board board, bool isMaximizing) {
-    if (depth == 0) {
-        return eval::evaluate(board);
-    }
-
-    std::vector<Move> moves = moveGen::generateMoves(board);
-    
-    if (isMaximizing) {
-        int maxEval = INT_MIN;
-
-        for (Move m : moves) {
-            int capturedPiece = board.squares[m.to];
-            int oldEP = board.enPassantSq;
-            bool oldWKS = board.w_kingside;
-            bool oldWQS = board.w_queenside;
-            bool oldBKS = board.b_kingside;
-            bool oldBQS = board.b_queenside;
-
-            board.makeMove(m);
-            int eval = explore(depth-1, board, false);
-            board.unmakeMove(m, capturedPiece, oldEP, oldWKS, oldWQS, oldBKS, oldBQS);
-
-            maxEval = std::max(maxEval, eval);
-        } 
-
-        return maxEval;
-    } else {
-        int minEval = INT_MAX;
-
-        for (Move m : moves) {
-            int capturedPiece = board.squares[m.to];
-            int oldEP = board.enPassantSq;
-            bool oldWKS = board.w_kingside;
-            bool oldWQS = board.w_queenside;
-            bool oldBKS = board.b_kingside;
-            bool oldBQS = board.b_queenside;
-
-            board.makeMove(m);
-            int eval = explore(depth-1, board, true);
-            board.unmakeMove(m, capturedPiece, oldEP, oldWKS, oldWQS, oldBKS, oldBQS);
-
-            minEval = std::min(minEval, eval);
-        }
-
-        return minEval;
-    }
+    return alpha;
 }
 
 uint64_t search::perft(int depth, Board& board) {

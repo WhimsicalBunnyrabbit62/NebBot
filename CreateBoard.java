@@ -153,7 +153,7 @@ public class CreateBoard extends JPanel {
         }
 
         if (piece == 4 && !castling && sourceTile == 56) {
-            canCastleWhiteKing = false;
+            canCastleWhiteQueen = false;
         }
 
         if (castling) {
@@ -234,7 +234,7 @@ public class CreateBoard extends JPanel {
                 options[0]
         );
 
-        if (choice < 0) choice = 0; // default to queen if dialog closed
+        if (choice < 0) choice = 0; 
 
         if (color == WHITE) {
             switch (choice) {
@@ -262,7 +262,7 @@ public class CreateBoard extends JPanel {
         bridge.sendCommand("position fen " + fen);
         bridge.sendCommand("go");
         new Thread(() -> {
-            bridge.sendCommand("perft 2");
+            //bridge.sendCommand("perft 2");
             String bestMove = bridge.waitForBestMove();
 
             if (bestMove == null || bestMove.contains("none")) {

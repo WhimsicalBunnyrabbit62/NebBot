@@ -74,7 +74,9 @@ bool moveGen::isSquareAttacked(int targetSq, int attackerColor, Board& board) {
     //pawn check
     int enemyPawn = (attackerColor == 1) ? W_PAWN : B_PAWN;
 
-    std::vector<int> pawnOffsets = (attackerColor == 1) ? std::vector<int>{-7, -9} : std::vector<int>{7, 9};
+    // Pawns attack "forward" from their perspective; to test attacks on targetSq,
+    // we look from targetSq back to the pawn's source squares.
+    std::vector<int> pawnOffsets = (attackerColor == WHITE) ? std::vector<int>{7, 9} : std::vector<int>{-7, -9};
     for (int offset : pawnOffsets) {
         int sq = targetSq + offset;
 
