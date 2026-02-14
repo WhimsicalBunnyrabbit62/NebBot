@@ -35,10 +35,8 @@ int main() {
             if (!moves.empty()) {
                 Move bestMove = search::findBestMove(4, board);
 
-                std::cout << "bestmove " << toAlgebraic(bestMove.from) << toAlgebraic(bestMove.to);
-
-                if (bestMove.flags == PROMOTION_QUEEN) std::cout << "q";
-                std::cout << std::endl;
+                std::cout << "bestmove " << toAlgebraic(bestMove.from) << toAlgebraic(bestMove.to); 
+                std::cout << "\n-----------------------------------------------newl" << std::endl;
             } else {
                 std::cout << "bestmove none" << std::endl;
             }

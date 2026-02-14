@@ -55,7 +55,6 @@ public class CreateBoard extends JPanel {
         bridge.sendCommand("uci");
         bridge.sendCommand("isready");
         bridge.sendCommand("position fen rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
-        bridge.sendCommand("perft 2");
 
 
         addMouseListener(new MouseAdapter() {
@@ -174,8 +173,9 @@ public class CreateBoard extends JPanel {
             board[clickedIndex] = promoteTo;
         }
 
-        String fen = getFen();
-        bridge.sendCommand("position fen " + fen);
+        //String fen = getFen();
+        //bridge.sendCommand("position fen " + fen);
+        //bridge.sendCommand("perft");
 
         currentTurn = (currentTurn == 1) ? -1 : 1;
         castling = false;
@@ -272,6 +272,8 @@ public class CreateBoard extends JPanel {
 
             SwingUtilities.invokeLater(() -> makeEngineMove(bestMove));
         }).start();
+
+        //bridge.sendCommand("perft");
     }
 
     private void loadImages() {

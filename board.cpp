@@ -15,9 +15,35 @@ void Board::reset() {
 }
 
 void Board::makeMove(Move m) {
+    int original = m.from;
     int piece = squares[m.from];
     squares[m.to] = piece;
     squares[m.from] = EMPTY;
+
+    if ((piece == W_KING) && m.flags != CASTLE_KING && m.flags != CASTLE_QUEEN) {
+        w_kingside = w_queenside = false;
+    }
+
+    if (piece == W_ROOK && original == 63 && m.flags != CASTLE_KING) {
+        w_kingside = false;
+    }
+
+    if (piece == W_ROOK && original == 56 && m.flags != CASTLE_KING) {
+        w_queenside = false;
+    }
+
+
+    if ((piece == B_KING) && m.flags != CASTLE_KING && m.flags != CASTLE_QUEEN) {
+        b_kingside = b_queenside = false;
+    }
+
+    if (piece == B_ROOK && original == 7 && m.flags != CASTLE_KING) {
+        b_kingside = false;
+    }
+
+    if (piece == B_ROOK && original == 0 && m.flags != CASTLE_KING) {
+        b_queenside = false;
+    }
 
     if (m.flags == PROMOTION_QUEEN || m.flags == PROMOTION_ROOK ||
         m.flags == PROMOTION_BISHOP || m.flags == PROMOTION_KNIGHT) {
@@ -87,17 +113,10 @@ void Board::loadFromFen(std::string fen) {
     std::string position, activeColor, castling, enPassant;
     ss >> position >> activeColor >> castling >> enPassant;
 
-    if (castling.find("KQ") != std::string::npos) {
-        w_queenside = w_kingside = true;
-    } else {
-        w_queenside = w_kingside = false;
-    }
-
-    if (castling.find("kq") != std::string::npos) {
-        b_queenside = b_kingside = true;
-    } else {
-        b_queenside = b_kingside = false;
-    }
+    w_kingside = (castling.find('K') != std::string::npos);
+    w_queenside = (castling.find('Q') != std::string::npos);
+    b_kingside = (castling.find('k') != std::string::npos);
+    b_queenside = (castling.find('q') != std::string::npos);
 
     if (enPassant != "-") {
         int col = enPassant[0] - 'a';

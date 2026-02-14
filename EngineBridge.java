@@ -28,8 +28,10 @@ public class EngineBridge {
         if (writer != null) {
             writer.println(command);
             writer.flush();
-
-            System.out.println("java sent: " + command);
+            
+            if (!command.equals("go")) {
+                System.out.println("java sent: " + command);
+            }
         }
     }
 
@@ -41,7 +43,11 @@ public class EngineBridge {
                 String line;
 
                 while ((line = reader.readLine()) != null) {
-                    System.out.println("C++ says: " + line);
+                    if (!line.contains("newl")) {
+                        System.out.println("C++ says: " + line);
+                    } else {
+                        System.out.println(line);
+                    }
                     if (line.startsWith("bestmove")) {
                         String[] parts = line.split(" ");
                         if (parts.length > 1) {

@@ -36,7 +36,7 @@ std::vector<Move> moveGen::generateMoves(Board& board) {
         board.makeMove(m);
         int kingSq = findKing(board, myColor);
                 
-        if (!isSquareAttacked(kingSq, enemyColor, board)) {
+        if (isSquareAttacked(kingSq, enemyColor, board) == false) {
             legalMoves.push_back(m);
         }
 
@@ -44,6 +44,19 @@ std::vector<Move> moveGen::generateMoves(Board& board) {
     }
 
     return legalMoves;
+}
+
+std::vector<Move> moveGen::generateCaptures(Board& board) {
+    std::vector<Move> allMoves = generateMoves(board);
+    std::vector<Move> captures;
+
+    for (Move m : allMoves) {
+        if (board.squares[m.to] != EMPTY || m.flags == EN_PASSANT) {
+            captures.push_back(m);
+        }
+    }
+
+    return captures;
 }
 
 std::string moveGen::toAlgebraic(int index) {
@@ -57,7 +70,7 @@ std::string moveGen::toAlgebraic(int index) {
 bool moveGen::isSquareAttacked(int targetSq, int attackerColor, Board& board) {
     // knight check
     int knightOffsets[] = {-17, -15, -10, -6, 6, 10, 15, 17};
-    int enemyKnight = (attackerColor == 1) ? W_KNIGHT : B_KNIGHT;
+    int enemyKnight = (attackerColor == WHITE) ? W_KNIGHT : B_KNIGHT;
 
     for (int offset : knightOffsets) {
         int sq = targetSq + offset;
@@ -72,10 +85,8 @@ bool moveGen::isSquareAttacked(int targetSq, int attackerColor, Board& board) {
     if (attackedBySlider(targetSq, attackerColor, board, { -9, -7, 7, 9 }, false)) return true; // bishop queen check
 
     //pawn check
-    int enemyPawn = (attackerColor == 1) ? W_PAWN : B_PAWN;
+    int enemyPawn = (attackerColor == WHITE) ? W_PAWN : B_PAWN;
 
-    // Pawns attack "forward" from their perspective; to test attacks on targetSq,
-    // we look from targetSq back to the pawn's source squares.
     std::vector<int> pawnOffsets = (attackerColor == WHITE) ? std::vector<int>{7, 9} : std::vector<int>{-7, -9};
     for (int offset : pawnOffsets) {
         int sq = targetSq + offset;
@@ -86,7 +97,7 @@ bool moveGen::isSquareAttacked(int targetSq, int attackerColor, Board& board) {
     }
 
     // king check
-    int enemyKing = (attackerColor == 1) ? W_KING : B_KING;
+    int enemyKing = (attackerColor == WHITE) ? W_KING : B_KING;
 
     int kingOffsets[] = {-9, -8, -7, -1, 1, 7, 8, 9};
     for (int offset : kingOffsets) {
@@ -254,7 +265,6 @@ void moveGen::genSlidingMoves(int sq, Board& board, std::vector<Move>& moves, co
 void moveGen::genKingMoves(int sq, Board& board, std::vector<Move>& moves) {
     int kingOffsets[] = {-9, -8, -7, -1, 1, 7, 8, 9};
     int myColor = board.turn;  
-    int enemyColor = (myColor == WHITE) ? BLACK : WHITE;
     
     for (int offset: kingOffsets) {
         int target = sq + offset;
@@ -268,10 +278,10 @@ void moveGen::genKingMoves(int sq, Board& board, std::vector<Move>& moves) {
         }
     }
 
-    if (myColor == WHITE && sq == 60) {
-        genCastlingMoves(sq, 1, board, moves);
-    } else if (myColor == BLACK && sq == 4) {
-        genCastlingMoves(sq, 2, board, moves);
+    if (myColor == WHITE && sq == 60 && !isSquareAttacked(sq, BLACK, board)) {
+        genCastlingMoves(sq, WHITE, board, moves);
+    } else if (myColor == BLACK && sq == 4 && !isSquareAttacked(sq, WHITE, board)) {
+        genCastlingMoves(sq, BLACK, board, moves);
     }
 }
 
@@ -281,14 +291,14 @@ void moveGen::genCastlingMoves(int sq, int color, Board& board, std::vector<Move
 
     if (color == WHITE) {
         // king side white
-        if (board.w_kingside && board.squares[61] == EMPTY && board.squares[62] == EMPTY) {
+        if (board.w_kingside && board.squares[61] == EMPTY && board.squares[62] == EMPTY && board.squares[63] == W_ROOK) {
             if (!isSquareAttacked(61, enemyColor, board) && !isSquareAttacked(62, enemyColor, board)) {
                 moves.push_back({60, 62, CASTLE_KING});
             }
         }
 
         // queen side white
-        if (board.w_queenside && board.squares[59] == EMPTY && board.squares[58] == EMPTY && board.squares[57] == EMPTY) {
+        if (board.w_queenside && board.squares[59] == EMPTY && board.squares[58] == EMPTY && board.squares[57] == EMPTY && board.squares[56] == W_ROOK) {
             if (!isSquareAttacked(59, enemyColor, board) && !isSquareAttacked(58, enemyColor, board)) {
                 moves.push_back({60, 58, CASTLE_QUEEN});
             }
@@ -297,14 +307,14 @@ void moveGen::genCastlingMoves(int sq, int color, Board& board, std::vector<Move
 
     if (color == BLACK) {
         // king side black
-        if (board.b_kingside && board.squares[5] == EMPTY && board.squares[6] == EMPTY) {
+        if (board.b_kingside && board.squares[5] == EMPTY && board.squares[6] == EMPTY && board.squares[7] == B_ROOK) {
             if (!isSquareAttacked(5, enemyColor, board) && !isSquareAttacked(6, enemyColor, board)) {
                 moves.push_back({4, 6, CASTLE_KING});
             }
         }
 
         // queen side black
-        if (board.b_queenside && board.squares[3] == EMPTY && board.squares[2] == EMPTY && board.squares[1] == EMPTY) {
+        if (board.b_queenside && board.squares[3] == EMPTY && board.squares[2] == EMPTY && board.squares[1] == EMPTY && board.squares[0] == B_ROOK) {
             if (!isSquareAttacked(3, enemyColor, board) && !isSquareAttacked(2, enemyColor, board)) {
                 moves.push_back({4, 2, CASTLE_QUEEN});
             }
@@ -314,7 +324,6 @@ void moveGen::genCastlingMoves(int sq, int color, Board& board, std::vector<Move
 
 bool moveGen::canMoveInDirection(int sq, int offset) {
     int file = sq % 8;
-    int rank = sq / 8;
     if (file == 7 && (offset == 1 || offset == -7 || offset == 9)) return false;
     if (file == 0 && (offset == -1 || offset == 7 || offset == -9)) return false;
 
@@ -370,7 +379,7 @@ bool moveGen::attackedBySlider(int targetSq, int attackerColor, Board& board, co
 }
 
 int moveGen::findKing(Board& board, int color) {
-    int targetKing = (color == 1) ? W_KING : B_KING;
+    int targetKing = (color == WHITE) ? W_KING : B_KING;
     for (int i = 0; i < 64; i++) {
         if (board.squares[i] == targetKing) return i;
     }

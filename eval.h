@@ -13,7 +13,7 @@ struct Attacker {
 
 class eval {
 public: 
-    static int evaluate(Board board);
+    static int evaluate(Board& board);
     static int exchangeEvaluation(Board& board, int from);
 };
 

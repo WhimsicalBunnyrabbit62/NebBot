@@ -27,11 +27,12 @@ struct Move {
     int from;
     int to;
     int flags = 0;
-    int score;
+    int score = 0;
 };
 
 inline bool isEnemy(int myPiece, int targetPiece) {
     if (targetPiece == EMPTY) return false;
+    if (targetPiece == W_KING || targetPiece == B_KING) return false;
     bool myColor = (myPiece < 7);
     bool targetColor = (targetPiece < 7);
 
