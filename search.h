@@ -8,7 +8,7 @@ class search {
 public:
     static int negamax(int depth, Board& board, int alpha, int beta);
     static Move findBestMove(int depth, Board& board);
-    static uint64_t perft(int depth, Board& board);
+    static uint64_t timedPerft(int depth, Board& board);
     static int qSearch(Board& board, int alpha, int beta);
 };
 

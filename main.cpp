@@ -45,7 +45,7 @@ int main() {
             if (line.size() > 6) {
                 depth = std::stoi(line.substr(6));
             }
-            std::cout << "total positions: " << search::perft(depth, board) << std::endl;
+            std::cout << "total positions looked at: " << search::timedPerft(depth, board) << std::endl;
         } else if (line == "quit") break;
     }
 

@@ -262,7 +262,7 @@ public class CreateBoard extends JPanel {
         bridge.sendCommand("position fen " + fen);
         bridge.sendCommand("go");
         new Thread(() -> {
-            //bridge.sendCommand("perft 2");
+            //bridge.sendCommand("perft 4");
             String bestMove = bridge.waitForBestMove();
 
             if (bestMove == null || bestMove.contains("none")) {
@@ -704,12 +704,48 @@ public class CreateBoard extends JPanel {
         int end = algebraicToIndex(endSquare);
 
         int movingPiece = board[start];
+        int capturedPiece = board[end];
 
-        board[end] = board[start];
-        board[start] = 0;
+        if (capturedPiece == 4) {
+            if (end == 63) canCastleWhiteKing = false;
+            if (end == 56) canCastleWhiteQueen = false;
+        } else if (capturedPiece == 12) {
+            if (end == 7) canCastleBlackKing = false;
+            if (end == 0) canCastleBlackQueen = false;
+        }
+
+        if ((movingPiece == 6 || movingPiece == 14) && Math.abs(end - start) == 2) {
+            if (end > start) {
+                castleKing(movingPiece == 6);
+            } else {
+                castleQueen(movingPiece == 6);
+            }
+        } else {
+            if ((movingPiece == 1 || movingPiece == 9) && end == enPassantTarget && board[end] == 0) {
+                int victimIndex = (movingPiece == 1) ? end + 8 : end - 8;
+                board[victimIndex] = 0;
+            }
+
+            board[end] = board[start];
+            board[start] = 0;
+        }
 
         if (board[end] == 1 && end < 8) board[end] = 5;
         if (board[end] == 9 && end >= 56) board[end] = 13;
+
+        if (movingPiece == 6) {
+            canCastleWhiteKing = false;
+            canCastleWhiteQueen = false;
+        } else if (movingPiece == 14) {
+            canCastleBlackKing = false;
+            canCastleBlackQueen = false;
+        } else if (movingPiece == 4) {
+            if (start == 63) canCastleWhiteKing = false;
+            if (start == 56) canCastleWhiteQueen = false;
+        } else if (movingPiece == 12) {
+            if (start == 7) canCastleBlackKing = false;
+            if (start == 0) canCastleBlackQueen = false;
+        }
 
         if (movingPiece == 1 && start - end == 16) {
             enPassantTarget = start - 8;
@@ -733,4 +769,4 @@ public class CreateBoard extends JPanel {
         frame.setLocationRelativeTo(null);
         frame.setVisible(true);
     }
-}
+}  
