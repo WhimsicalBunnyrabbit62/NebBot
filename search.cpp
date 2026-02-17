@@ -29,7 +29,8 @@ Move search::findBestMove(int depth, Board& board) {
     nodesLookedAt = 0;
 
     Move bestMove;
-    std::vector<Move> allMoves = moveGen::generateMoves(board);
+    MoveList allMoves;
+    moveGen::generateMoves(board, allMoves);
 
     if (allMoves.empty()) {
         int kingSq = moveGen::findKing(board, board.turn);
@@ -67,19 +68,20 @@ Move search::findBestMove(int depth, Board& board) {
     auto end = std::chrono::steady_clock::now();
     auto diff = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
 
-    std::cout << "time (ms): " << diff.count() << std::endl;
-    std::cout << "nodes looked at: " << nodesLookedAt << std::endl;
+    std::cout << "Time taken (Engine Move) (ms): " << diff.count() << std::endl;
+    std::cout << "Nodes looked at (Engine Move): " << nodesLookedAt << std::endl;
 
     return bestMove;
 }
 
 int search::negamax(int depth, Board& board, int alpha, int beta) {
+    int best = NEG_INF;
+    MoveList moves;
+    moveGen::generateMoves(board, moves);
+
     if (depth <= 0) {
         return qSearch(board, alpha, beta);
     }
-
-    int best = NEG_INF;
-    std::vector<Move> moves = moveGen::generateMoves(board);
 
     if (moves.empty()) {
         int kingSq = moveGen::findKing(board, board.turn);
@@ -114,9 +116,14 @@ int search::negamax(int depth, Board& board, int alpha, int beta) {
     return best;
 }
 
+inline int pieceTypeIndex(int piece) {
+    if (piece == EMPTY) return 0;
+    return (piece < 7) ? piece : piece - 8;
+}
+
 int getMvvLvaScore(Board& board, Move m) {
-    int victim = board.squares[m.to];
-    int attacker = board.squares[m.from];
+    int victim = pieceTypeIndex(board.squares[m.to]);
+    int attacker = pieceTypeIndex(board.squares[m.from]);
 
     return MvvLvaScores[victim][attacker];
 }
@@ -127,21 +134,23 @@ int search::qSearch(Board& board, int alpha, int beta) {
     if (standPat >= beta) return beta; // beta -> lowest score opponent will let us reach
     if (standPat >= alpha) alpha = standPat; // alpha -> best we can get;
 
-    std::vector<Move> captures = moveGen::generateCaptures(board);
+    MoveList captures;
+    MoveList allMoves;
+    moveGen::generateMoves(board, allMoves);
+    moveGen::generateCaptures(board, allMoves, captures);
 
     //MVV-LVA sort here
 
     for (int i = 0; i < captures.size(); i++) {
-        Move m = captures.at(i);
-
-        int bestIdx = i;
+        int bestIdx = i;    
         for (int j = i + 1; j < captures.size(); j++) {
-            if (getMvvLvaScore(board, captures.at(j)) > getMvvLvaScore(board, captures.at(bestIdx))) {
+            if (getMvvLvaScore(board, captures.moves[j]) > getMvvLvaScore(board, captures.moves[bestIdx])) {
                 bestIdx = j;
             }
         }
         
-        std::swap(captures.at(i), captures.at(bestIdx));
+        std::swap(captures.moves[i], captures.moves[bestIdx]);
+        Move m = captures.moves[i];
 
         int capturedPiece = board.squares[m.to];
         int oldEP = board.enPassantSq;
@@ -167,7 +176,8 @@ uint64_t perft(int depth, Board& board) {
     if (depth == 0) return 1;
 
     uint64_t nodes = 0;
-    std::vector<Move> moves = moveGen::generateMoves(board);
+    MoveList moves;
+    moveGen::generateMoves(board, moves);
 
     for (const Move& m : moves) {
         int capturedPiece = board.squares[m.to];
@@ -193,7 +203,9 @@ uint64_t search::timedPerft(int depth, Board& board) {
     auto end = std::chrono::steady_clock::now();
     auto diff = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
 
-    std::cout << "time (ms): " << diff.count() << std::endl;
+    std::cout << "Time Taken (Engine Move) (ms): " << diff.count() << std::endl;
+
+    std::cout << "Total positions looked at (perft): ";
 
     return nodes;
 }

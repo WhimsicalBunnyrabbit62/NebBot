@@ -28,7 +28,8 @@ int main() {
             std::string fen = line.substr(13);
             board.loadFromFen(fen);
         } else if (line.find("go") == 0) {
-            std::vector<Move> moves = moveGen::generateMoves(board);
+            MoveList moves;
+            moveGen::generateMoves(board, moves);
 
             std::cout << "Evaluation: " << eval::evaluate(board) << std::endl;
 
@@ -36,7 +37,7 @@ int main() {
                 Move bestMove = search::findBestMove(4, board);
 
                 std::cout << "bestmove " << toAlgebraic(bestMove.from) << toAlgebraic(bestMove.to); 
-                std::cout << "\n-----------------------------------------------newl" << std::endl;
+                std::cout << "\n------------------------------------------------------newl" << std::endl;
             } else {
                 std::cout << "bestmove none" << std::endl;
             }
@@ -45,7 +46,7 @@ int main() {
             if (line.size() > 6) {
                 depth = std::stoi(line.substr(6));
             }
-            std::cout << "total positions looked at: " << search::timedPerft(depth, board) << std::endl;
+            std::cout << search::timedPerft(depth, board) << std::endl;
         } else if (line == "quit") break;
     }
 

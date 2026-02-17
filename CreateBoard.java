@@ -175,7 +175,7 @@ public class CreateBoard extends JPanel {
 
         //String fen = getFen();
         //bridge.sendCommand("position fen " + fen);
-        //bridge.sendCommand("perft");
+        //bridge.sendCommand("perft 6");
 
         currentTurn = (currentTurn == 1) ? -1 : 1;
         castling = false;
@@ -262,7 +262,7 @@ public class CreateBoard extends JPanel {
         bridge.sendCommand("position fen " + fen);
         bridge.sendCommand("go");
         new Thread(() -> {
-            //bridge.sendCommand("perft 4");
+            //bridge.sendCommand("perft 6");
             String bestMove = bridge.waitForBestMove();
 
             if (bestMove == null || bestMove.contains("none")) {

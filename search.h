@@ -3,6 +3,7 @@
 
 #include "Types.h"
 #include "board.h"
+#include "moveGen.h"
 
 class search {
 public:

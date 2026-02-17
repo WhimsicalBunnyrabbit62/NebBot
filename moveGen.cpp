@@ -1,9 +1,9 @@
 #include "moveGen.h"
 #include <iostream>
 
-std::vector<Move> moveGen::generateMoves(Board& board) {
-    std::vector<Move> pseudoMoves;
-    std::vector<Move> legalMoves;
+void moveGen::generateMoves(Board& board, MoveList& legalMoves) {
+    legalMoves.clear();
+    MoveList moves;
 
     for (int i = 0; i < 64; i++) {
         int piece = board.squares[i];
@@ -13,19 +13,19 @@ std::vector<Move> moveGen::generateMoves(Board& board) {
         bool isWhiteTurn = (board.turn == WHITE);
 
         if (isWhitePiece == isWhiteTurn) {
-            if (piece == W_PAWN || piece == B_PAWN) genPawnMoves(i, board, pseudoMoves);
-            else if (piece == W_KNIGHT || piece == B_KNIGHT) genKnightMoves(i, board, pseudoMoves);
-            else if (piece == W_ROOK || piece == B_ROOK) genSlidingMoves(i, board, pseudoMoves, {-8, 8, -1, 1});
-            else if (piece == W_BISHOP || piece == B_BISHOP) genSlidingMoves(i, board, pseudoMoves, {-9, -7, 7, 9});
-            else if (piece == W_QUEEN || piece == B_QUEEN) genSlidingMoves(i, board, pseudoMoves, {-8, 8, -1, 1, -9, -7, 7, 9});
-            else if (piece == W_KING || piece == B_KING) genKingMoves(i, board, pseudoMoves);
+            if (piece == W_PAWN || piece == B_PAWN) genPawnMoves(i, board, moves);
+            else if (piece == W_KNIGHT || piece == B_KNIGHT) genKnightMoves(i, board, moves);
+            else if (piece == W_ROOK || piece == B_ROOK) genSlidingMoves(i, board, moves, {-8, 8, -1, 1});
+            else if (piece == W_BISHOP || piece == B_BISHOP) genSlidingMoves(i, board, moves, {-9, -7, 7, 9});
+            else if (piece == W_QUEEN || piece == B_QUEEN) genSlidingMoves(i, board, moves, {-8, 8, -1, 1, -9, -7, 7, 9});
+            else if (piece == W_KING || piece == B_KING) genKingMoves(i, board, moves);
         }
     }
 
     int myColor = board.turn;
     int enemyColor = (myColor == WHITE) ? BLACK : WHITE;
 
-    for (Move m : pseudoMoves) {
+    for (Move m : moves) {
         int capturedPiece = board.squares[m.to];
         int oldEP = board.enPassantSq;
         bool oWKS = board.w_kingside;
@@ -42,21 +42,16 @@ std::vector<Move> moveGen::generateMoves(Board& board) {
 
         board.unmakeMove(m, capturedPiece, oldEP, oWKS, oWQS, oBKS, oBQS);
     }
-
-    return legalMoves;
 }
 
-std::vector<Move> moveGen::generateCaptures(Board& board) {
-    std::vector<Move> allMoves = generateMoves(board);
-    std::vector<Move> captures;
-
+void moveGen::generateCaptures(Board& board, MoveList& allMoves, MoveList& captures) {
+    captures.clear();
+    
     for (Move m : allMoves) {
         if (board.squares[m.to] != EMPTY || m.flags == EN_PASSANT) {
             captures.push_back(m);
         }
     }
-
-    return captures;
 }
 
 std::string moveGen::toAlgebraic(int index) {
@@ -112,7 +107,7 @@ bool moveGen::isSquareAttacked(int targetSq, int attackerColor, Board& board) {
     return false;
 }
 
-void moveGen::genPawnMoves(int sq, Board& board, std::vector<Move>& moves) {
+void moveGen::genPawnMoves(int sq, Board& board, MoveList& moves) {
     int rank = sq / 8;
     int file = sq % 8;
 
@@ -215,7 +210,7 @@ void moveGen::genPawnMoves(int sq, Board& board, std::vector<Move>& moves) {
     }
 }
 
-void moveGen::genKnightMoves(int sq, Board& board, std::vector<Move>& moves) {
+void moveGen::genKnightMoves(int sq, Board& board, MoveList& moves) {
     int knightOffsets[] = {-17, -15, -10, -6, 6, 10, 15, 17};
     int startFile = sq % 8;
     int startRank = sq / 8;
@@ -237,7 +232,7 @@ void moveGen::genKnightMoves(int sq, Board& board, std::vector<Move>& moves) {
     }
 }
 
-void moveGen::genSlidingMoves(int sq, Board& board, std::vector<Move>& moves, const std::vector<int>& offsets) {
+void moveGen::genSlidingMoves(int sq, Board& board, MoveList& moves, const std::vector<int>& offsets) {
     for (int offset : offsets) {
         int target = sq;
 
@@ -262,7 +257,7 @@ void moveGen::genSlidingMoves(int sq, Board& board, std::vector<Move>& moves, co
     }
 }
 
-void moveGen::genKingMoves(int sq, Board& board, std::vector<Move>& moves) {
+void moveGen::genKingMoves(int sq, Board& board, MoveList& moves) {
     int kingOffsets[] = {-9, -8, -7, -1, 1, 7, 8, 9};
     int myColor = board.turn;  
     
@@ -285,7 +280,7 @@ void moveGen::genKingMoves(int sq, Board& board, std::vector<Move>& moves) {
     }
 }
 
-void moveGen::genCastlingMoves(int sq, int color, Board& board, std::vector<Move>& moves) {
+void moveGen::genCastlingMoves(int sq, int color, Board& board, MoveList& moves) {
     int enemyColor = (color == WHITE) ? BLACK : WHITE;
     if (isSquareAttacked(sq, enemyColor, board)) return;
 
@@ -386,7 +381,7 @@ int moveGen::findKing(Board& board, int color) {
     return -1; 
 }
 
-void moveGen::addPromotionMoves(int from, int to, std::vector<Move>& moves) {
+void moveGen::addPromotionMoves(int from, int to, MoveList& moves) {
     moves.push_back({from, to, PROMOTION_QUEEN});
     moves.push_back({from, to, PROMOTION_ROOK});
     moves.push_back({from, to, PROMOTION_BISHOP});
