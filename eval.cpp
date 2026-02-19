@@ -193,8 +193,8 @@ int eval::evaluate(Board& board) {
         if (piece == EMPTY) continue;
         
         int tableNum = getTable(piece);
-        int value = pieceValue(piece) + mg_pesto_table[tableNum][sq];
-        int color = (piece < 7) ? WHITE : BLACK;
+        int pstSq = (piece < 7) ? sq : (sq ^ 56);
+        int value = pieceValue(piece) + mg_pesto_table[tableNum][pstSq];
         (piece < 7) ? score += value : score -= value;
     }
 

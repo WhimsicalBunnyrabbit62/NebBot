@@ -34,10 +34,10 @@ int main() {
             std::cout << "Evaluation: " << eval::evaluate(board) << std::endl;
 
             if (!moves.empty()) {
-                Move bestMove = search::findBestMove(4, board);
+                Move bestMove = search::findBestMove(6, board);
 
                 std::cout << "bestmove " << toAlgebraic(bestMove.from) << toAlgebraic(bestMove.to); 
-                std::cout << "\n------------------------------------------------------newl" << std::endl;
+                std::cout << "\n-----------------------------------------------------------newl" << std::endl;
             } else {
                 std::cout << "bestmove none" << std::endl;
             }
