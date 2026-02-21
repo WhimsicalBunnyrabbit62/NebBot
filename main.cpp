@@ -34,7 +34,8 @@ int main() {
             std::cout << "Evaluation: " << eval::evaluate(board) << std::endl;
 
             if (!moves.empty()) {
-                Move bestMove = search::findBestMove(6, board);
+                int maxTimeMs = 5000;
+                Move bestMove = search::startSearch(board, maxTimeMs);
 
                 std::cout << "bestmove " << toAlgebraic(bestMove.from) << toAlgebraic(bestMove.to); 
                 std::cout << "\n-----------------------------------------------------------newl" << std::endl;
@@ -43,9 +44,8 @@ int main() {
             }
         } else if (line.rfind("perft", 0) == 0) {
             int depth = 1;
-            if (line.size() > 6) {
-                depth = std::stoi(line.substr(6));
-            }
+            if (line.size() > 6) depth = std::stoi(line.substr(6));
+        
             std::cout << search::timedPerft(depth, board) << std::endl;
         } else if (line == "quit") break;
     }

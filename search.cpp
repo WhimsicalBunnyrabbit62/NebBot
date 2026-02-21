@@ -7,11 +7,14 @@
 #include <iostream>
 #include <climits>
 #include <chrono>
+#include <algorithm>
 
 static constexpr int NEG_INF = -30000;
 static constexpr int POS_INF = 30000;
 
 static int nodesLookedAt = 0;
+bool stopSearch = false;
+Move curBestMove;
 
 static const int MvvLvaScores[7][7] = {
 // Attackers: [placeholder, P, N, B, R, Q, K]
@@ -24,11 +27,11 @@ static const int MvvLvaScores[7][7] = {
     {0, 65, 64, 63, 62, 61, 60}    // Victim: K
 };
 
-Move search::findBestMove(int depth, Board& board) {
+Move search::startSearch(Board& board, int maxTimeMs) {
     auto start = std::chrono::steady_clock::now();
     nodesLookedAt = 0;
+    stopSearch = false;
 
-    Move bestMove;
     MoveList allMoves;
     moveGen::generateMoves(board, allMoves);
 
@@ -45,24 +48,43 @@ Move search::findBestMove(int depth, Board& board) {
     }
 
     int bestEval = NEG_INF;
+    Move bestMove = allMoves.moves[0];
+    
+    for (int curDepth = 1; curDepth <= 64; curDepth++) {
+        int curBestEval = NEG_INF;
+        Move curBestMove;
 
-    for (Move m : allMoves) {
-        int capturedPiece = board.squares[m.to];
-        int oldEP = board.enPassantSq;
-        bool oldWKS = board.w_kingside;
-        bool oldWQS = board.w_queenside;
-        bool oldBKS = board.b_kingside;
-        bool oldBQS = board.b_queenside;
+        for (Move m : allMoves) {
+            int capturedPiece = board.squares[m.to];
+            int oldEP = board.enPassantSq;
+            bool oldWKS = board.w_kingside;
+            bool oldWQS = board.w_queenside;
+            bool oldBKS = board.b_kingside;
+            bool oldBQS = board.b_queenside;
 
-        board.makeMove(m);
-        nodesLookedAt++;
-        int eval = -negamax(depth-1, board, NEG_INF, POS_INF);
-        board.unmakeMove(m, capturedPiece, oldEP, oldWKS, oldWQS, oldBKS, oldBQS);
+            board.makeMove(m);
 
-        if (eval >= bestEval) {
-            bestEval = eval;
-            bestMove = m;
+            nodesLookedAt++;
+            int score = -negamax(curDepth - 1, board, NEG_INF, POS_INF, start, maxTimeMs);
+            board.unmakeMove(m, capturedPiece, oldEP, oldWKS, oldWQS, oldBKS, oldBQS);
+
+            if (stopSearch) break;
+            
+            if (score > curBestEval) {
+                curBestEval = score;
+                curBestMove = m;
+            }
         }
+
+        if (!stopSearch) {
+            bestMove = curBestMove;
+            std::cout << "depth: " << curDepth << ". Best Eval: " << curBestEval << std::endl;
+        } else {
+            break;
+        }
+
+        auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - start).count();
+        if (elapsed > maxTimeMs/2) break;
     }
 
     auto end = std::chrono::steady_clock::now();
@@ -74,7 +96,19 @@ Move search::findBestMove(int depth, Board& board) {
     return bestMove;
 }
 
-int search::negamax(int depth, Board& board, int alpha, int beta) {
+int search::negamax(int depth, Board& board, int alpha, int beta, std::chrono::steady_clock::time_point startTime, int limit) {
+    // duration cast -> convert nanoseconds to manageable numbers in this case ms
+    // chrono steady clock now -> get current time 
+    // - start -> difference from the time at the beginning
+    // .count() -> from a chrono object into a number (long here)
+    if (nodesLookedAt % 2048 == 0) {
+        long elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - startTime).count();
+
+        if (elapsed >= limit) stopSearch = true;
+    }
+
+    if (stopSearch) return 0;
+
     int best = NEG_INF;
     MoveList moves;
     moveGen::generateMoves(board, moves);
@@ -89,7 +123,7 @@ int search::negamax(int depth, Board& board, int alpha, int beta) {
 
         if (kingSq != -1 && moveGen::isSquareAttacked(kingSq, enemy, board)) {
             return NEG_INF;
-        } else  {
+        } else {
             return 0;
         }
     }
@@ -104,7 +138,7 @@ int search::negamax(int depth, Board& board, int alpha, int beta) {
         nodesLookedAt++;
 
         board.makeMove(m);
-        int score = -negamax(depth-1, board, -beta, -alpha);
+        int score = -negamax(depth-1, board, -beta, -alpha, startTime, limit);
         board.unmakeMove(m, capturedPiece, oldEP, oldWKS, oldWQS, oldBKS, oldBQS);
 
         best = std::max(best, score);
