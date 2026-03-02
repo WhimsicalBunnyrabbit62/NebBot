@@ -405,7 +405,7 @@ void moveGen::genSlidingMoves(Board& board, MoveList& moves) {
     }
 }
 
-void moveGen::genKingMoves(int sq, Board& board, MoveList& moves, StateInfo s) {
+void moveGen::genKingMoves(int sq, Board& board, MoveList& moves) {
     uint64_t moveMask = kingMasks[sq];
 
     uint64_t myOccupancy = (board.turn == WHITE) ? board.whiteOcc : board.blackOcc;
@@ -423,8 +423,8 @@ void moveGen::genKingMoves(int sq, Board& board, MoveList& moves, StateInfo s) {
         uint64_t betweenKingSide = (1ULL << 61) | (1ULL << 62);
         uint64_t betweenQueenSide = (1ULL << 57) | (1ULL << 58) | (1ULL << 59);
 
-        if (s.w_kingside && !kingSideAttacked && ((board.allOcc & betweenKingSide) == 0)) moves.push_back({sq, 62, CASTLE_KING});
-        if (s.w_queenside && !queenSideAttacked && ((board.allOcc & betweenQueenSide) == 0)) moves.push_back({sq, 58, CASTLE_QUEEN});
+        if (board.w_kingside && !kingSideAttacked && ((board.allOcc & betweenKingSide) == 0)) moves.push_back({sq, 62, CASTLE_KING});
+        if (board.w_queenside && !queenSideAttacked && ((board.allOcc & betweenQueenSide) == 0)) moves.push_back({sq, 58, CASTLE_QUEEN});
     } else {
         bool kingSideAttacked = isSquareAttacked(board, 4) || isSquareAttacked(board, 5) || isSquareAttacked(board, 6);
         bool queenSideAttacked = isSquareAttacked(board, 2) || isSquareAttacked(board, 3) || isSquareAttacked(board, 4);
@@ -432,8 +432,8 @@ void moveGen::genKingMoves(int sq, Board& board, MoveList& moves, StateInfo s) {
         uint64_t betweenKingSide = (1ULL << 5) | (1ULL << 6);
         uint64_t betweenQueenSide = (1ULL << 1) | (1ULL << 2) | (1ULL << 3);
 
-        if (s.b_kingside && !kingSideAttacked && ((board.allOcc & betweenKingSide) == 0)) moves.push_back({sq, 6, CASTLE_KING});
-        if (s.b_queenside && !queenSideAttacked && ((board.allOcc & betweenQueenSide) == 0)) moves.push_back({sq, 2, CASTLE_QUEEN});
+        if (board.b_kingside && !kingSideAttacked && ((board.allOcc & betweenKingSide) == 0)) moves.push_back({sq, 6, CASTLE_KING});
+        if (board.b_queenside && !queenSideAttacked && ((board.allOcc & betweenQueenSide) == 0)) moves.push_back({sq, 2, CASTLE_QUEEN});
     }
 }
 

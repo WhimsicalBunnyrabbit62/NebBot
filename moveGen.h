@@ -45,7 +45,8 @@ public:
     static void initAll();
 private:
     static std::string toAlgebraic(int index);
-    static void genKingMoves(int sq, Board& board, MoveList& moves, StateInfo s);
+
+    static void genKingMoves(int sq, Board& board, MoveList& moves);
     static void genSlidingMoves(Board& board, MoveList& moves);
     static void genKnightMoves(Board& board, MoveList& moves);
 };
