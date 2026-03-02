@@ -284,7 +284,7 @@ int eval::evaluate(Board& board) {
         if (mgPhase > 24) mgPhase = 24;
         
         int tableNum = getTable(piece);
-        int pstSq = (piece < 7) ? (sq ^ 56) : sq;
+        int pstSq = (piece < 7) ? sq : (sq ^ 56);
         egScore += (piece < 7) ? eg_pesto_table[tableNum][pstSq] : -eg_pesto_table[tableNum][pstSq];
         mgScore += (piece < 7) ? mg_pesto_table[tableNum][pstSq] : -mg_pesto_table[tableNum][pstSq];
 

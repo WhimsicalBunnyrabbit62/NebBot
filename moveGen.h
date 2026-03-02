@@ -5,6 +5,18 @@
 #include "Types.h"
 #include <vector>
 
+const int WP = 0;
+const int WN = 1;
+const int WB = 2;
+const int WR = 3;
+const int WQ = 4;
+const int WK = 5;
+const int BP = 6;
+const int BN = 7;
+const int BB = 8;
+const int BR = 9;
+const int BQ = 10;
+const int BK = 11;
 
 struct MoveList {
     Move moves[256]; 
@@ -29,22 +41,13 @@ public:
     static void generateMoves(Board& board, MoveList& moves);
     static void generateCaptures(Board& board, MoveList& allMoves, MoveList& captures);
 
-    static bool canMoveInDirection(int sq, int offset);
-    static bool isSquareAttacked(int sq, int attackerColor, Board& board);
-    static int findKing(Board& board, int color);
-
+    static bool isSquareAttacked(Board& board, int sq);
+    static void initAll();
 private:
-    static void genPawnMoves(int sq, Board& board, MoveList& moves);
-    static void genKnightMoves(int sq, Board& board, MoveList& moves);
-    static void genSlidingMoves(int sq, Board& board, MoveList& moves, const std::vector<int>& offsets);
-    static void genKingMoves(int sq, Board& board, MoveList& moves);
     static std::string toAlgebraic(int index);
-
-    static void addPromotionMoves(int from, int to, MoveList& moves);
-    static bool attackedBySlider(int targetSq, int attackerColor, Board& board, const std::vector<int>& offsets, bool isRook);
-    static bool isSafeJump(int startSq, int targetSq);
-    static bool isSafeJumpKing(int startSq, int targetSq);
-    static void genCastlingMoves(int sq, int color, Board& board, MoveList& moves);
+    static void genKingMoves(int sq, Board& board, MoveList& moves, StateInfo s);
+    static void genSlidingMoves(Board& board, MoveList& moves);
+    static void genKnightMoves(Board& board, MoveList& moves);
 };
 
 #endif

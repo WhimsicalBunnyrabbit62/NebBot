@@ -1,46 +1,301 @@
 #include "moveGen.h"
+#include "board.h"
 #include <iostream>
+#include <cstdint>
+
+const uint64_t FILE_A = 0x0101010101010101;
+const uint64_t FILE_H = 0x8080808080808080;
+const uint64_t RANK_1 = 0xFF00000000000000ULL;
+const uint64_t RANK_2 = 0x00FF000000000000ULL;
+const uint64_t RANK_7 = 0x000000000000FF00ULL;
+const uint64_t RANK_8 = 0x00000000000000FFULL;
+
+
+// pradu kannan's magic numbers
+const uint64_t RookMagics[64] = {
+    0x0080001020400080ULL, 0x0040001000200040ULL, 0x0080081000200080ULL, 0x0080040800100080ULL,
+    0x0080020400080080ULL, 0x0080010200040080ULL, 0x0080008001000200ULL, 0x0080002040800100ULL,
+    0x0000800020400080ULL, 0x0000400020005000ULL, 0x0000801000200080ULL, 0x0000800800100080ULL,
+    0x0000800400080080ULL, 0x0000800200040080ULL, 0x0000800100020080ULL, 0x0000800040800100ULL,
+    0x0000208000400080ULL, 0x0000404000201000ULL, 0x0000808010002000ULL, 0x0000808008001000ULL,
+    0x0000808004000800ULL, 0x0000808002000400ULL, 0x0000010100020004ULL, 0x0000020000408104ULL,
+    0x0000208080004000ULL, 0x0000200040005000ULL, 0x0000100080200080ULL, 0x0000080080100080ULL,
+    0x0000040080080080ULL, 0x0000020080040080ULL, 0x0000010080800200ULL, 0x0000800080004100ULL,
+    0x0000204000800080ULL, 0x0000200040401000ULL, 0x0000100080802000ULL, 0x0000080080801000ULL,
+    0x0000040080800800ULL, 0x0000020080800400ULL, 0x0000020001010004ULL, 0x0000800040800100ULL,
+    0x0000204000808000ULL, 0x0000200040008080ULL, 0x0000100020008080ULL, 0x0000080010008080ULL,
+    0x0000040008008080ULL, 0x0000020004008080ULL, 0x0000010002008080ULL, 0x0000004081020004ULL,
+    0x0000204000800080ULL, 0x0000200040008080ULL, 0x0000100020008080ULL, 0x0000080010008080ULL,
+    0x0000040008008080ULL, 0x0000020004008080ULL, 0x0000800100020080ULL, 0x0000800041000080ULL,
+    0x00FFFCDDFCED714AULL, 0x007FFCDDFCED714AULL, 0x003FFFCDFFD88096ULL, 0x0000040810002101ULL,
+    0x0001000204080011ULL, 0x0001000204000801ULL, 0x0001000082000401ULL, 0x0001FFFAABFAD1A2ULL
+};
+
+const uint64_t BishopMagics[64] = {
+    0x0002020202020200ULL, 0x0002020202020000ULL, 0x0004010202000000ULL, 0x0004040080000000ULL,
+    0x0001104000000000ULL, 0x0000821040000000ULL, 0x0000410410400000ULL, 0x0000104104104000ULL,
+    0x0000040404040400ULL, 0x0000020202020200ULL, 0x0000040102020000ULL, 0x0000040400800000ULL,
+    0x0000011040000000ULL, 0x0000008210400000ULL, 0x0000004104104000ULL, 0x0000002082082000ULL,
+    0x0004000808080800ULL, 0x0002000404040400ULL, 0x0001000202020200ULL, 0x0000800802004000ULL,
+    0x0000800400A00000ULL, 0x0000200100884000ULL, 0x0000400082082000ULL, 0x0000200041041000ULL,
+    0x0002080010101000ULL, 0x0001040008080800ULL, 0x0000208004010400ULL, 0x0000404004010200ULL,
+    0x0000840000802000ULL, 0x0000404002011000ULL, 0x0000808001041000ULL, 0x0000404000820800ULL,
+    0x0001041000202000ULL, 0x0000820800101000ULL, 0x0000104400080800ULL, 0x0000020080080080ULL,
+    0x0000404040040100ULL, 0x0000808100020100ULL, 0x0001010100020800ULL, 0x0000808080010400ULL,
+    0x0000820820004000ULL, 0x0000410410002000ULL, 0x0000082088001000ULL, 0x0000002011000800ULL,
+    0x0000080100400400ULL, 0x0001010101000200ULL, 0x0002020202000400ULL, 0x0001010101000200ULL,
+    0x0000410410400000ULL, 0x0000208208200000ULL, 0x0000002084100000ULL, 0x0000000020880000ULL,
+    0x0000001002020000ULL, 0x0000040408020000ULL, 0x0004040404040000ULL, 0x0002020202020000ULL,
+    0x0000104104104000ULL, 0x0000002082082000ULL, 0x0000000020841000ULL, 0x0000000000208800ULL,
+    0x0000000010020200ULL, 0x0000000404080200ULL, 0x0000040404040400ULL, 0x0002020202020200ULL
+};
+
+static uint64_t knightMasks[64];
+static uint64_t kingMasks[64];
+static uint64_t pawnAttacks[2][64];
+static uint64_t rookMasks[64];
+static uint64_t bishopMasks[64];
+
+static uint64_t rookTable[64][4096];
+static uint64_t bishopTable[64][512];
+
+inline int get_lsb(uint64_t bb) {
+    return __builtin_ctzll(bb);
+}
+
+inline void pop_bit(uint64_t& bb) {
+    bb &= (bb - 1);
+} 
+
+void initRookMask() {
+    for (int sq = 0; sq < 64; sq++) {
+        uint64_t mask = 0;
+        int r = sq / 8;
+        int f = sq % 8;
+
+        for (int i = r-1; i >= 1; i--) mask |= (1ULL << (i * 8 + f));
+        for (int i = r+1; i <= 6; i++) mask |= (1ULL << (i * 8 + f));
+        for (int i = f-1; i >= 1; i--) mask |= (1ULL << (r * 8 + i));
+        for (int i = f+1; i <= 6; i++) mask |= (1ULL << (r * 8 + i));
+
+        rookMasks[sq] = mask;
+    }
+}
+
+void initBishopMask() {
+    int dr[] = {-1, 1, 1, -1};
+    int df[] = {1, 1, -1, -1};
+
+    for (int sq = 0; sq < 64; sq++) {
+        uint64_t mask = 0;
+        int r = sq / 8;
+        int f = sq % 8;
+
+        for (int i = 0; i < 4; i++) {
+            for (int d = 1; d < 6; d++) {
+                int nr = r + dr[i] * d;
+                int nf = f + df[i] * d;
+
+                if (nr < 0 || nr >= 8 || nf < 0 || nf >= 8) break;
+                uint64_t bit = (1ULL << (nr * 8 + nf));
+
+                mask |= bit;
+            }
+        }
+
+        bishopMasks[sq] = mask;
+    }
+}
+
+uint64_t set_occupancy(int index, uint64_t mask) {
+    uint64_t occupancy = 0ULL;
+    int bitsInMask = __builtin_popcountll(mask);
+
+    for (int i = 0; i < bitsInMask; i++) {
+        int square = get_lsb(mask);
+        pop_bit(mask);
+
+        if (index & (1 << i)) {
+            occupancy |= (1ULL << square);
+        }
+    }
+
+    return occupancy;
+}
+
+uint64_t slowBishopAttackGen(int sq, uint64_t blockers) {
+    uint64_t attacks = 0ULL;
+    int r = sq / 8;
+    int f = sq % 8;
+
+    int dr[] = {-1, 1, 1, -1};
+    int df[] = {1, 1, -1, -1};
+
+    for (int i = 0; i < 4; i++) {
+        for (int d = 1; d < 8; d++) {
+            int nr = r + dr[i] * d;
+            int nf = f + df[i] * d;
+
+            if (nr < 0 || nr >= 8 || nf < 0 || nf >= 8) break;
+
+            uint64_t bit = (1ULL << (nr * 8 + nf));
+
+            attacks |= bit;
+            if (blockers & bit) break; // blocked
+        }
+    }
+    
+    return attacks;
+}
+
+uint64_t slowRookAttackGen(int sq, uint64_t blockers) {
+    uint64_t attacks = 0ULL;
+    int r = sq / 8;
+    int f = sq % 8;
+
+    int dr[] = {-1, 1, 0, 0};
+    int df[] = {0, 0, 1, -1};
+
+    for (int i = 0; i < 4; i++) {
+        for (int d = 1; d < 8; d++) {
+            int nr = r + dr[i] * d;
+            int nf = f + df[i] * d;
+
+            if (nr < 0 || nr >= 8 || nf < 0 || nf >= 8) break;
+
+            uint64_t bit = (1ULL << (nr * 8 + nf));
+
+            attacks |= bit;
+            if (blockers & bit) break; // blocked
+        }
+    }
+
+    return attacks;
+}
+
+void initBishopTable() {
+    for (int sq = 0; sq < 64; sq++) {
+        uint64_t mask = bishopMasks[sq];
+        int bitCount = __builtin_popcountll(mask);
+        int totalPermutations = (1 << bitCount);
+
+        for (int i = 0; i < totalPermutations; i++) {
+            uint64_t occupancy = set_occupancy(i, mask);
+
+            int magicIdx = (occupancy * BishopMagics[sq]) >> (64 - bitCount);
+            bishopTable[sq][magicIdx] = slowBishopAttackGen(sq, occupancy);
+        }
+    }
+}
+
+void initRookTable() {
+    for (int sq = 0; sq < 64; sq++) {
+        uint64_t mask = rookMasks[sq];
+        int bitCount = __builtin_popcountll(mask);
+        // some cool binary math here to get powers of 2 based on the number of relevant bits (1s)
+        int totalPermutations = (1 << bitCount);
+
+        for (int i = 0; i < totalPermutations; i++) {
+            uint64_t occupancy = set_occupancy(i, mask);
+            
+            // magic math equation that gives possible attack pattern for every occupancy for every square
+            // how does it work??? who knows...
+            int magicIdx = (occupancy * RookMagics[sq]) >> (64 - bitCount);
+
+            rookTable[sq][magicIdx] = slowRookAttackGen(sq, occupancy);
+        }
+    }
+}
+
+void initKnightMask() {
+    int dr[] = {-2, -2, -1, -1, 1, 1, 2, 2};
+    int df[] = {-1, 1, -2, 2, -2, 2, -1, 1};
+
+    for (int sq = 0; sq < 64; sq++) {
+        uint64_t mask = 0;
+        int rank = sq / 8;
+        int file = sq % 8;
+
+        for (int i = 0; i < 8; i++) {
+            int r = rank + dr[i];
+            int f = file + df[i];
+
+            if (r >= 0 && r < 8 && f >= 0 && f < 8) {
+                mask |= 1ULL << (r * 8 + f);
+            }
+        }
+
+        knightMasks[sq] = mask;
+    }
+}
+
+inline void initPawnAttacks() {
+    for (int sq = 0; sq < 64; sq++) {
+        uint64_t bit = (1ULL << sq);
+
+        uint64_t wAttacks = 0;
+        if (!(bit & FILE_A)) wAttacks |= (bit >> 9);
+        if (!(bit & FILE_H)) wAttacks |= (bit >> 7);
+        pawnAttacks[0][sq] = wAttacks;
+
+        uint64_t bAttacks = 0;
+        if (!(bit & FILE_A)) bAttacks |= (bit << 7);
+        if (!(bit & FILE_H)) bAttacks |= (bit << 9);
+        pawnAttacks[1][sq] = bAttacks;
+    }
+}
+
+void initKingMask() {
+    for (int sq = 0; sq < 64; sq++) {
+        uint64_t mask = 0;
+        uint64_t bit = (1ULL << sq); // king location
+
+        if (!(bit & FILE_A)) {
+            mask |= (bit >> 1);
+            mask |= (bit >> 9);
+            mask |= (bit << 7);
+        } 
+        if (!(bit & FILE_H)) {
+            mask |= (bit << 1);
+            mask |= (bit << 9);
+            mask |= (bit >> 7);
+        }
+
+        mask |= (bit << 8);
+        mask |= (bit >> 8); // can move up down w/o checks cuz of binary math
+
+        kingMasks[sq] = mask;
+    }
+}
+
+void moveGen::initAll() {
+    initPawnAttacks();
+    initKnightMask();
+    initBishopMask();
+    initBishopTable();
+    initRookMask();
+    initRookTable();
+    initKingMask();
+}
 
 void moveGen::generateMoves(Board& board, MoveList& legalMoves) {
     legalMoves.clear();
     MoveList moves;
 
-    for (int i = 0; i < 64; i++) {
-        int piece = board.squares[i];
-        if (piece == EMPTY) continue;
+    uint64_t kingBoard = (board.turn == WHITE) ? board.pieces[WK] : board.pieces[BK];
+    int kingSq = get_lsb(kingBoard);
 
-        bool isWhitePiece = (piece < 7);
-        bool isWhiteTurn = (board.turn == WHITE);
-
-        if (isWhitePiece == isWhiteTurn) {
-            if (piece == W_PAWN || piece == B_PAWN) genPawnMoves(i, board, moves);
-            else if (piece == W_KNIGHT || piece == B_KNIGHT) genKnightMoves(i, board, moves);
-            else if (piece == W_ROOK || piece == B_ROOK) genSlidingMoves(i, board, moves, {-8, 8, -1, 1});
-            else if (piece == W_BISHOP || piece == B_BISHOP) genSlidingMoves(i, board, moves, {-9, -7, 7, 9});
-            else if (piece == W_QUEEN || piece == B_QUEEN) genSlidingMoves(i, board, moves, {-8, 8, -1, 1, -9, -7, 7, 9});
-            else if (piece == W_KING || piece == B_KING) genKingMoves(i, board, moves);
-        }
-    }
-
-    int myColor = board.turn;
-    int enemyColor = (myColor == WHITE) ? BLACK : WHITE;
+    genPawnMovesBB(board, moves);
+    genKnightMoves(board, moves);
+    genSlidingMoves(board, moves);
+    genKingMoves(kingSq, board, moves);
 
     for (Move m : moves) {
-        int capturedPiece = board.squares[m.to];
-        int oldEP = board.enPassantSq;
-        bool oWKS = board.w_kingside;
-        bool oWQS = board.w_queenside;
-        bool oBKS = board.b_kingside;
-        bool oBQS = board.b_queenside;
-
-        board.makeMove(m);
-        int kingSq = findKing(board, myColor);
+        StateInfo s = board.makeMove(m);
                 
-        if (isSquareAttacked(kingSq, enemyColor, board) == false) {
-            legalMoves.push_back(m);
-        }
+        if (!isSquareAttacked(board, kingSq)) legalMoves.push_back(m);
 
-        board.unmakeMove(m, capturedPiece, oldEP, oWKS, oWQS, oBKS, oBQS);
+        board.unmakeMove(m, s);
     }
 }
 
@@ -62,328 +317,250 @@ std::string moveGen::toAlgebraic(int index) {
     return std::string(1, fileChar) + std::to_string(rank);
 }
 
-bool moveGen::isSquareAttacked(int targetSq, int attackerColor, Board& board) {
-    // knight check
-    int knightOffsets[] = {-17, -15, -10, -6, 6, 10, 15, 17};
-    int enemyKnight = (attackerColor == WHITE) ? W_KNIGHT : B_KNIGHT;
+void moveGen::genKnightMoves(Board& board, MoveList& moves) {
+    uint64_t knights = (board.turn == WHITE) ? board.pieces[WN] : board.pieces[BN];
+    uint64_t myOcc = (board.turn == WHITE) ? board.whiteOcc : board.blackOcc;
 
-    for (int offset : knightOffsets) {
-        int sq = targetSq + offset;
-        
-        if (sq >= 0 && sq < 64 && isSafeJump(sq, targetSq)) {
-            if (board.squares[sq] == enemyKnight) return true;
+    while (knights) {
+        int from = get_lsb(knights);
+
+        uint64_t possibleMoves = knightMasks[from] & ~myOcc;
+
+        while (possibleMoves) {
+            int to = get_lsb(possibleMoves);
+            
+            moves.push_back({from, to});
+
+            pop_bit(possibleMoves);
         }
+
+        pop_bit(knights);
     }
-
-    // sliding check
-    if (attackedBySlider(targetSq, attackerColor, board, { -8, 8, -1, 1 }, true)) return true; // rook queen check
-    if (attackedBySlider(targetSq, attackerColor, board, { -9, -7, 7, 9 }, false)) return true; // bishop queen check
-
-    //pawn check
-    int enemyPawn = (attackerColor == WHITE) ? W_PAWN : B_PAWN;
-
-    std::vector<int> pawnOffsets = (attackerColor == WHITE) ? std::vector<int>{7, 9} : std::vector<int>{-7, -9};
-    for (int offset : pawnOffsets) {
-        int sq = targetSq + offset;
-
-        if (sq >= 0 && sq < 64 && std::abs((sq % 8) - (targetSq % 8)) == 1) {
-            if (board.squares[sq] == enemyPawn) return true;
-        }
-    }
-
-    // king check
-    int enemyKing = (attackerColor == WHITE) ? W_KING : B_KING;
-
-    int kingOffsets[] = {-9, -8, -7, -1, 1, 7, 8, 9};
-    for (int offset : kingOffsets) {
-        int sq = targetSq + offset;
-
-        if (sq >= 0 && sq < 64 && std::abs((sq % 8) - (targetSq % 8)) <= 1) {
-            if (board.squares[sq] == enemyKing) return true;
-        }
-    }
-    
-    // passed
-    return false;
 }
 
-void moveGen::genPawnMoves(int sq, Board& board, MoveList& moves) {
-    int rank = sq / 8;
-    int file = sq % 8;
+void moveGen::genSlidingMoves(Board& board, MoveList& moves) {
+    uint64_t bishops = (board.turn == WHITE) ? board.pieces[WB] : board.pieces[BB];
+    uint64_t rooks = (board.turn == WHITE) ? board.pieces[WR] : board.pieces[BR];
+    uint64_t queens = (board.turn == WHITE) ? board.pieces[WQ] : board.pieces[BQ];
+    uint64_t ownPieces = (board.turn == WHITE) ? board.whiteOcc : board.blackOcc;
 
-    // WHITE pawn
+    while (bishops) {
+        int from = get_lsb(bishops);
+        int bitCount = __builtin_popcountll(bishopMasks[from]);
+
+        uint64_t blockers = bishopMasks[from] & board.allOcc;
+
+        int magicIdx = (blockers * BishopMagics[from]) >> (64 - bitCount);
+
+        uint64_t possibleMoves = bishopTable[from][magicIdx] & ~ownPieces;
+
+        while (possibleMoves) {
+            int to = get_lsb(possibleMoves);
+            
+            moves.push_back({from, to});
+            pop_bit(possibleMoves);
+        }
+        pop_bit(bishops);
+    }
+
+    while (rooks) {
+        int from = get_lsb(rooks);
+        int bitCount = __builtin_popcountll(rookMasks[from]);
+
+        uint64_t blockers = rookMasks[from] & board.allOcc;
+
+        int magicIdx = (blockers * RookMagics[from]) >> (64 - bitCount);
+
+        uint64_t possibleMoves = rookTable[from][magicIdx] & ~ownPieces;
+
+        while (possibleMoves) {
+            int to = get_lsb(possibleMoves);
+
+            moves.push_back({from, to});
+            pop_bit(possibleMoves);
+        }
+        pop_bit(rooks);
+    }
+
+    while (queens) {
+        int from = get_lsb(queens);
+        int rookBitCount = __builtin_popcountll(rookMasks[from]);
+        int bishopBitCount = __builtin_popcountll(bishopMasks[from]);
+
+        uint64_t rookBlockers = rookMasks[from] & board.allOcc;
+        uint64_t bishopBlockers = bishopMasks[from] & board.allOcc;
+        
+        int orthogonalIdx = (rookBlockers * RookMagics[from]) >> (64 - rookBitCount);
+        int diagonalIdx = (bishopBlockers * BishopMagics[from]) >> (64 - bishopBitCount);
+
+        uint64_t possibleMoves = (rookTable[from][orthogonalIdx] | bishopTable[from][diagonalIdx]) & ~ownPieces;
+
+        while (possibleMoves) {
+            int to = get_lsb(possibleMoves);
+
+            moves.push_back({from, to});
+            pop_bit(possibleMoves);
+        }
+        pop_bit(queens);
+    }
+}
+
+void moveGen::genKingMoves(int sq, Board& board, MoveList& moves, StateInfo s) {
+    uint64_t moveMask = kingMasks[sq];
+
+    uint64_t myOccupancy = (board.turn == WHITE) ? board.whiteOcc : board.blackOcc;
+    
+    while (moveMask) {
+        int to = get_lsb(moveMask);
+        if (!isSquareAttacked(board, to)) moves.push_back({sq, to});
+        pop_bit(moveMask);
+    }
+
     if (board.turn == WHITE) {
-        int forward = sq - 8;
-        
-        if (forward >= 0 && board.squares[forward] == EMPTY) {
-            if (rank == 1) {
-                addPromotionMoves(sq, forward, moves);
-            } else {
-                moves.push_back({sq, forward});
+        bool kingSideAttacked = isSquareAttacked(board, 60) || isSquareAttacked(board, 61) || isSquareAttacked(board, 62);
+        bool queenSideAttacked = isSquareAttacked(board, 58) || isSquareAttacked(board, 59) || isSquareAttacked(board, 60);
 
-                if (rank == 6 && board.squares[sq - 16] == EMPTY) {
-                    moves.push_back({sq, sq - 16, DOUBLE_PAWN_PUSH});
-                }
-            }
-        }
+        uint64_t betweenKingSide = (1ULL << 61) | (1ULL << 62);
+        uint64_t betweenQueenSide = (1ULL << 57) | (1ULL << 58) | (1ULL << 59);
 
-        if (file > 0) {
-            int diagLeft = sq - 9;
-            if (isEnemy(W_PAWN, board.squares[diagLeft])) {
-                if (rank == 1) {
-                    addPromotionMoves(sq, diagLeft, moves);
-                } else {
-                    moves.push_back({sq, diagLeft});
-                }
-            } else if (diagLeft == board.enPassantSq) {
-                int victimSq = diagLeft + 8;
-                if (victimSq >= 0 && victimSq < 64 && board.squares[victimSq] == B_PAWN) {
-                    moves.push_back({sq, diagLeft, EN_PASSANT});
-                }
-            }
-        }
+        if (s.w_kingside && !kingSideAttacked && ((board.allOcc & betweenKingSide) == 0)) moves.push_back({sq, 62, CASTLE_KING});
+        if (s.w_queenside && !queenSideAttacked && ((board.allOcc & betweenQueenSide) == 0)) moves.push_back({sq, 58, CASTLE_QUEEN});
+    } else {
+        bool kingSideAttacked = isSquareAttacked(board, 4) || isSquareAttacked(board, 5) || isSquareAttacked(board, 6);
+        bool queenSideAttacked = isSquareAttacked(board, 2) || isSquareAttacked(board, 3) || isSquareAttacked(board, 4);
 
-        if (file < 7) {
-            int diagRight = sq - 7;
-            if (isEnemy(W_PAWN, board.squares[diagRight])) {
-                if (rank == 1) {
-                    addPromotionMoves(sq, diagRight, moves);
-                } else {
-                    moves.push_back({sq, diagRight});
-                }
-            } else if (diagRight == board.enPassantSq) {
-                int victimSq = diagRight + 8;
-                if (victimSq >= 0 && victimSq < 64 && board.squares[victimSq] == B_PAWN) {
-                    moves.push_back({sq, diagRight, EN_PASSANT});
-                }
-            }
-        }
-    }
+        uint64_t betweenKingSide = (1ULL << 5) | (1ULL << 6);
+        uint64_t betweenQueenSide = (1ULL << 1) | (1ULL << 2) | (1ULL << 3);
 
-    // BLACK pawn
-    if (board.turn == BLACK) {
-        int forward = sq + 8;
-
-        if (forward < 64 && board.squares[forward] == EMPTY) {
-            if (rank == 6) {
-                addPromotionMoves(sq, forward, moves);
-            } else {
-                moves.push_back({sq, forward});
-
-                if (rank == 1 && board.squares[sq + 16] == EMPTY) {
-                    moves.push_back({sq, sq + 16, DOUBLE_PAWN_PUSH});
-                }
-            }
-        }
-
-        if (file > 0) {
-            int diagLeft = sq + 7; 
-            if (isEnemy(B_PAWN, board.squares[diagLeft])) {
-                if (rank == 6) {
-                    addPromotionMoves(sq, diagLeft, moves);
-                } else {
-                    moves.push_back({sq, diagLeft});
-                }
-            } else if (diagLeft == board.enPassantSq) {
-                int victimSq = diagLeft - 8;
-                if (victimSq >= 0 && victimSq < 64 && board.squares[victimSq] == W_PAWN) {
-                    moves.push_back({sq, diagLeft, EN_PASSANT});
-                }
-            }
-        }
-
-        if (file < 7) {
-            int diagRight = sq + 9;
-            if (isEnemy(B_PAWN, board.squares[diagRight])) {
-                if (rank == 6) {
-                    addPromotionMoves(sq, diagRight, moves);
-                } else {
-                    moves.push_back({sq, diagRight});
-                }
-            } else if (diagRight == board.enPassantSq) {
-                int victimSq = diagRight - 8;
-                if (victimSq >= 0 && victimSq < 64 && board.squares[victimSq] == W_PAWN) {
-                    moves.push_back({sq, diagRight, EN_PASSANT});
-                }
-            }
-        }
+        if (s.b_kingside && !kingSideAttacked && ((board.allOcc & betweenKingSide) == 0)) moves.push_back({sq, 6, CASTLE_KING});
+        if (s.b_queenside && !queenSideAttacked && ((board.allOcc & betweenQueenSide) == 0)) moves.push_back({sq, 2, CASTLE_QUEEN});
     }
 }
 
-void moveGen::genKnightMoves(int sq, Board& board, MoveList& moves) {
-    int knightOffsets[] = {-17, -15, -10, -6, 6, 10, 15, 17};
-    int startFile = sq % 8;
-    int startRank = sq / 8;
-
-    for (int offset : knightOffsets) {
-        int target = sq + offset;
-        if (target >= 0 && target < 64) {
-            int targetFile = target % 8;
-            int targetRank = target / 8;
-
-            if (std::abs(startFile - targetFile) <= 2 && std::abs(startRank - targetRank) <= 2) {
-                int pieceAtTarget = board.squares[target];
-
-                if (pieceAtTarget == EMPTY || isEnemy(board.squares[sq], pieceAtTarget)) {
-                    moves.push_back({sq, target});
-                }
-            }
-        }
-    }
-}
-
-void moveGen::genSlidingMoves(int sq, Board& board, MoveList& moves, const std::vector<int>& offsets) {
-    for (int offset : offsets) {
-        int target = sq;
-
-        while (true) {
-            if (!canMoveInDirection(target, offset)) break;
-
-            target += offset;
-
-            if (target < 0 || target >= 64) break;
-
-            int pieceAtTarget = board.squares[target];
-
-            if (pieceAtTarget == EMPTY) {
-                moves.push_back({sq, target});
-            } else if (isEnemy(board.squares[sq], board.squares[target])) {
-                moves.push_back({sq, target});
-                break;
-            } else {
-                break;
-            }
-        }
-    }
-}
-
-void moveGen::genKingMoves(int sq, Board& board, MoveList& moves) {
-    int kingOffsets[] = {-9, -8, -7, -1, 1, 7, 8, 9};
-    int myColor = board.turn;  
-    
-    for (int offset: kingOffsets) {
-        int target = sq + offset;
-
-        if (target >= 0 && target < 64 && isSafeJumpKing(sq, target)) {
-            int pieceAtTarget = board.squares[target];
-
-            if (pieceAtTarget == EMPTY || isEnemy(board.squares[sq], pieceAtTarget)) {
-                moves.push_back({sq, target});
-            }
-        }
-    }
-
-    if (myColor == WHITE && sq == 60 && !isSquareAttacked(sq, BLACK, board)) {
-        genCastlingMoves(sq, WHITE, board, moves);
-    } else if (myColor == BLACK && sq == 4 && !isSquareAttacked(sq, WHITE, board)) {
-        genCastlingMoves(sq, BLACK, board, moves);
-    }
-}
-
-void moveGen::genCastlingMoves(int sq, int color, Board& board, MoveList& moves) {
-    int enemyColor = (color == WHITE) ? BLACK : WHITE;
-    if (isSquareAttacked(sq, enemyColor, board)) return;
-
-    if (color == WHITE) {
-        // king side white
-        if (board.w_kingside && board.squares[61] == EMPTY && board.squares[62] == EMPTY && board.squares[63] == W_ROOK) {
-            if (!isSquareAttacked(61, enemyColor, board) && !isSquareAttacked(62, enemyColor, board)) {
-                moves.push_back({60, 62, CASTLE_KING});
-            }
-        }
-
-        // queen side white
-        if (board.w_queenside && board.squares[59] == EMPTY && board.squares[58] == EMPTY && board.squares[57] == EMPTY && board.squares[56] == W_ROOK) {
-            if (!isSquareAttacked(59, enemyColor, board) && !isSquareAttacked(58, enemyColor, board)) {
-                moves.push_back({60, 58, CASTLE_QUEEN});
-            }
-        }
-    }
-
-    if (color == BLACK) {
-        // king side black
-        if (board.b_kingside && board.squares[5] == EMPTY && board.squares[6] == EMPTY && board.squares[7] == B_ROOK) {
-            if (!isSquareAttacked(5, enemyColor, board) && !isSquareAttacked(6, enemyColor, board)) {
-                moves.push_back({4, 6, CASTLE_KING});
-            }
-        }
-
-        // queen side black
-        if (board.b_queenside && board.squares[3] == EMPTY && board.squares[2] == EMPTY && board.squares[1] == EMPTY && board.squares[0] == B_ROOK) {
-            if (!isSquareAttacked(3, enemyColor, board) && !isSquareAttacked(2, enemyColor, board)) {
-                moves.push_back({4, 2, CASTLE_QUEEN});
-            }
-        }
-    }
-}
-
-bool moveGen::canMoveInDirection(int sq, int offset) {
-    int file = sq % 8;
-    if (file == 7 && (offset == 1 || offset == -7 || offset == 9)) return false;
-    if (file == 0 && (offset == -1 || offset == 7 || offset == -9)) return false;
-
-    return true;
-}
-
-bool moveGen::isSafeJump(int startSq, int targetSq) {
-    int startFile = startSq % 8;
-    int startRank = startSq / 8;
-    int endFile = targetSq % 8;
-    int endRank = targetSq / 8;
-
-    int df = std::abs(startFile - endFile);
-    int dr = std::abs(startRank - endRank);
-    return (df == 1 && dr == 2) || (df == 2 && dr == 1);
-}
-
-bool moveGen::isSafeJumpKing(int startSq, int targetSq) {
-    int startFile = startSq % 8;
-    int startRank = startSq / 8;
-    int endFile = targetSq % 8;
-    int endRank = targetSq / 8;
-
-    return std::abs(startFile - endFile) <= 1 && std::abs(startRank - endRank) <= 1;
-}
-
-bool moveGen::attackedBySlider(int targetSq, int attackerColor, Board& board, const std::vector<int>& offsets, bool isRook) {
-    for (int offset : offsets) {
-        int currentSq = targetSq;
-        while (true) {
-            if (!canMoveInDirection(currentSq, offset)) break;
-
-            currentSq += offset;
-            if (currentSq < 0 || currentSq >= 64) break;
-            int piece = board.squares[currentSq];
-
-            if (piece != EMPTY) {
-                bool isEnemyPiece = (attackerColor == WHITE && piece < 7) || (attackerColor == BLACK && piece > 8);
-
-                if (isEnemyPiece) {
-                    if (isRook) {
-                        if (piece == W_ROOK || piece == B_ROOK || piece == W_QUEEN || piece == B_QUEEN) return true;
-                    } else {
-                        if (piece == W_BISHOP || piece == B_BISHOP || piece == W_QUEEN || piece == B_QUEEN) return true;
-                    }
-                }
-                break;
-            } 
-        }
-    }
-
-    return false;
-}
-
-int moveGen::findKing(Board& board, int color) {
-    int targetKing = (color == WHITE) ? W_KING : B_KING;
-    for (int i = 0; i < 64; i++) {
-        if (board.squares[i] == targetKing) return i;
-    }
-    return -1; 
-}
-
-void moveGen::addPromotionMoves(int from, int to, MoveList& moves) {
+void addPromotions(int from, int to, MoveList& moves) {
     moves.push_back({from, to, PROMOTION_QUEEN});
-    moves.push_back({from, to, PROMOTION_ROOK});
     moves.push_back({from, to, PROMOTION_BISHOP});
     moves.push_back({from, to, PROMOTION_KNIGHT});
+    moves.push_back({from, to, PROMOTION_ROOK});
 }
+
+void genPawnMovesBB(Board& board, MoveList& moves) {
+    uint64_t emptyMask = ~board.allOcc;
+    uint64_t epMask = (board.enPassantSq == -1) ? 0 : (1ULL << board.enPassantSq);
+
+    if (board.turn == WHITE) {
+        uint64_t whiteMask = board.pieces[WP];
+
+        uint64_t whiteSingleMask = (whiteMask >> 8) & emptyMask;
+        uint64_t whiteDoubleMask = ((whiteMask & RANK_2) >> 8 & emptyMask) >> 8 & emptyMask;
+
+        uint64_t promoPush = whiteSingleMask & RANK_8;
+        uint64_t quietPush = whiteSingleMask & ~RANK_8;
+        
+        while (quietPush) {
+            int to = get_lsb(quietPush);
+            moves.push_back({to+8, to});
+            pop_bit(quietPush);
+        }
+
+        while (promoPush) {
+            int to = get_lsb(promoPush);
+
+            addPromotions(to + 8, to, moves);
+
+            pop_bit(promoPush);
+        }
+
+        while (whiteDoubleMask) {
+            int to = get_lsb(whiteDoubleMask);
+            moves.push_back({to+16,to});
+            pop_bit(whiteDoubleMask);
+        }
+
+        uint64_t capL = (whiteMask & ~FILE_A) >> 9 & (board.blackOcc | epMask);
+        while (capL) {
+            int to = get_lsb(capL);
+            if ((1ULL << to) & RANK_8) addPromotions(to + 9, to, moves);
+            else moves.push_back({to + 9, to});
+            pop_bit(capL); 
+        }
+
+        uint64_t capR = (whiteMask & ~FILE_H) >> 7 & (board.blackOcc | epMask);
+        while (capR) {
+            int to = get_lsb(capR);
+            if ((1ULL << to) & RANK_8) addPromotions(to + 7, to, moves);
+            else moves.push_back({to + 7, to});
+            pop_bit(capR);
+        }
+
+    } else {
+        uint64_t blackMask = board.pieces[BP];
+
+        uint64_t blackSingleMask = (blackMask << 8) & emptyMask;
+        uint64_t blackDoubleMask = ((blackMask & RANK_7) << 8 & emptyMask) << 8 & emptyMask;
+
+        uint64_t promoPush = blackSingleMask & RANK_1;
+        uint64_t quietPush = blackSingleMask & ~RANK_1;
+        
+        while (quietPush) {
+            int to = get_lsb(quietPush);
+            moves.push_back({to-8, to});
+            pop_bit(quietPush);
+        }
+
+        while (promoPush) {
+            int to = get_lsb(promoPush);
+
+            addPromotions(to-8, to, moves);
+
+            pop_bit(promoPush);
+        }
+
+        while (blackDoubleMask) {
+            int to = get_lsb(blackDoubleMask);
+            moves.push_back({to-16,to});
+            pop_bit(blackDoubleMask);
+        }
+
+        uint64_t capR = (blackMask & ~FILE_A) << 7 & (board.whiteOcc | epMask);
+        while (capR) {
+            int to = get_lsb(capR);
+            if ((1ULL << to) & RANK_1) addPromotions(to-7, to, moves);
+            else moves.push_back({to-7, to});
+            pop_bit(capR); 
+        }
+
+        uint64_t capL = (blackMask & ~FILE_H) << 9 & (board.whiteOcc | epMask);
+        while (capL) {
+            int to = get_lsb(capL);
+            if ((1ULL << to) & RANK_1) addPromotions(to-9, to, moves);
+            else moves.push_back({to-9, to});
+            pop_bit(capL);
+        }
+    }
+}
+
+bool moveGen::isSquareAttacked(Board& board, int sq) {
+    uint64_t bit = (1ULL << sq);
+    uint64_t enemyKnights = (board.turn == BLACK) ? board.pieces[WN] : board.pieces[BN];
+    uint64_t enemyBishops = (board.turn == BLACK) ? board.pieces[WB] : board.pieces[BB];
+    uint64_t enemyRooks = (board.turn == BLACK) ? board.pieces[WR] : board.pieces[BR];
+    uint64_t enemyQueens = (board.turn == BLACK) ? board.pieces[WQ] : board.pieces[BQ];
+    
+    if (board.turn == BLACK && (pawnAttacks[0][sq] & board.pieces[WP])) return true;
+    if (board.turn == WHITE && (pawnAttacks[1][sq] & board.pieces[BP])) return true;
+    
+    uint64_t bishopBlockers = bishopMasks[sq] & board.allOcc;
+    uint64_t bishopBitCount = __builtin_popcountll(bishopMasks[sq]);
+    uint64_t bishopMagicIdx = (bishopBlockers * BishopMagics[sq]) >> (64 - bishopBitCount);
+
+    uint64_t rookBlockers = rookMasks[sq] & board.allOcc;
+    uint64_t rookBitCount = __builtin_popcountll(rookMasks[sq]);
+    uint64_t rookMagicIdx = (rookBlockers * RookMagics[sq]) >> (64 - rookBitCount);
+
+    if (knightMasks[sq] & enemyKnights) return true;
+    if (bishopTable[sq][bishopMagicIdx] & (enemyBishops | enemyQueens)) return true;
+    if (rookTable[sq][rookMagicIdx] & (enemyRooks | enemyQueens)) return true;
+
+    return false;
+}   

@@ -55,18 +55,11 @@ Move search::startSearch(Board& board, int maxTimeMs) {
         Move curBestMove;
 
         for (Move m : allMoves) {
-            int capturedPiece = board.squares[m.to];
-            int oldEP = board.enPassantSq;
-            bool oldWKS = board.w_kingside;
-            bool oldWQS = board.w_queenside;
-            bool oldBKS = board.b_kingside;
-            bool oldBQS = board.b_queenside;
-
-            board.makeMove(m);
+            StateInfo s = board.makeMove(m);
 
             nodesLookedAt++;
             int score = -negamax(curDepth - 1, board, NEG_INF, POS_INF, start, maxTimeMs);
-            board.unmakeMove(m, capturedPiece, oldEP, oldWKS, oldWQS, oldBKS, oldBQS);
+            board.unmakeMove(m, s);
 
             if (stopSearch) break;
             
@@ -129,17 +122,12 @@ int search::negamax(int depth, Board& board, int alpha, int beta, std::chrono::s
     }
 
     for (Move m : moves) {
-        int capturedPiece = board.squares[m.to];
-        int oldEP = board.enPassantSq;
-        bool oldWKS = board.w_kingside;
-        bool oldWQS = board.w_queenside;
-        bool oldBKS = board.b_kingside;
-        bool oldBQS = board.b_queenside;
+        StateInfo s = board.makeMove(m);
+        
         nodesLookedAt++;
 
-        board.makeMove(m);
         int score = -negamax(depth-1, board, -beta, -alpha, startTime, limit);
-        board.unmakeMove(m, capturedPiece, oldEP, oldWKS, oldWQS, oldBKS, oldBQS);
+        board.unmakeMove(m, s);
 
         best = std::max(best, score);
         alpha = std::max(alpha, score);
@@ -186,18 +174,11 @@ int search::qSearch(Board& board, int alpha, int beta) {
         std::swap(captures.moves[i], captures.moves[bestIdx]);
         Move m = captures.moves[i];
 
-        int capturedPiece = board.squares[m.to];
-        int oldEP = board.enPassantSq;
-        bool oldWKS = board.w_kingside;
-        bool oldWQS = board.w_queenside;
-        bool oldBKS = board.b_kingside;
-        bool oldBQS = board.b_queenside;
+        StateInfo s = board.makeMove(m);
 
         nodesLookedAt++;
-
-        board.makeMove(m);
         int score = -qSearch(board, -beta, -alpha);
-        board.unmakeMove(m, capturedPiece, oldEP, oldWKS, oldWQS, oldBKS, oldBQS);
+        board.unmakeMove(m, s);
 
         if (score >= beta) return beta; // alpha beta prune
         if (score > alpha) alpha = score;
@@ -214,16 +195,9 @@ uint64_t perft(int depth, Board& board) {
     moveGen::generateMoves(board, moves);
 
     for (const Move& m : moves) {
-        int capturedPiece = board.squares[m.to];
-        int oldEP = board.enPassantSq;
-        bool oldWKS = board.w_kingside;
-        bool oldWQS = board.w_queenside;
-        bool oldBKS = board.b_kingside;
-        bool oldBQS = board.b_queenside;
-
-        board.makeMove(m);
+        StateInfo s = board.makeMove(m);
         nodes += perft(depth - 1, board);
-        board.unmakeMove(m, capturedPiece, oldEP, oldWKS, oldWQS, oldBKS, oldBQS);
+        board.unmakeMove(m, s);
     }
 
     return nodes;

@@ -13,6 +13,12 @@ std::string toAlgebraic(int sq) {
     return std::string(1, file) + std::string(1, rank);
 }
 
+
+
+void init() {
+    moveGen::initRookTable();
+}
+
 int main() {
     Board board;
     std::string line;
@@ -34,7 +40,7 @@ int main() {
             std::cout << "Evaluation: " << eval::evaluate(board) << std::endl;
 
             if (!moves.empty()) {
-                int maxTimeMs = 5000;
+                int maxTimeMs = 2500;
                 Move bestMove = search::startSearch(board, maxTimeMs);
 
                 std::cout << "bestmove " << toAlgebraic(bestMove.from) << toAlgebraic(bestMove.to); 
