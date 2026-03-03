@@ -59,11 +59,11 @@ static uint64_t bishopMasks[64];
 static uint64_t rookTable[64][4096];
 static uint64_t bishopTable[64][512];
 
-inline int get_lsb(uint64_t bb) {
+int moveGen::get_lsb(uint64_t bb) {
     return __builtin_ctzll(bb);
 }
 
-inline void pop_bit(uint64_t& bb) {
+void moveGen::pop_bit(uint64_t& bb) {
     bb &= (bb - 1);
 } 
 
@@ -79,7 +79,7 @@ void initRookMask() {
         for (int i = f+1; i <= 6; i++) mask |= (1ULL << (r * 8 + i));
 
         rookMasks[sq] = mask;
-    }
+    } 
 }
 
 void initBishopMask() {
@@ -92,14 +92,12 @@ void initBishopMask() {
         int f = sq % 8;
 
         for (int i = 0; i < 4; i++) {
-            for (int d = 1; d < 6; d++) {
-                int nr = r + dr[i] * d;
-                int nf = f + df[i] * d;
-
-                if (nr < 0 || nr >= 8 || nf < 0 || nf >= 8) break;
-                uint64_t bit = (1ULL << (nr * 8 + nf));
-
-                mask |= bit;
+            int nr = r + dr[i];
+            int nf = f + df[i];
+            while (nr >= 1 && nr <= 6 && nf >= 1 && nf <= 6) {
+                mask |= (1ULL << (nr * 8 + nf));
+                nr += dr[i];
+                nf += df[i];
             }
         }
 
@@ -107,7 +105,7 @@ void initBishopMask() {
     }
 }
 
-uint64_t set_occupancy(int index, uint64_t mask) {
+uint64_t moveGen::set_occupancy(int index, uint64_t mask) {
     uint64_t occupancy = 0ULL;
     int bitsInMask = __builtin_popcountll(mask);
 
@@ -173,7 +171,7 @@ uint64_t slowRookAttackGen(int sq, uint64_t blockers) {
     return attacks;
 }
 
-void initBishopTable() {
+void moveGen::initBishopTable() {
     for (int sq = 0; sq < 64; sq++) {
         uint64_t mask = bishopMasks[sq];
         int bitCount = __builtin_popcountll(mask);
@@ -188,7 +186,7 @@ void initBishopTable() {
     }
 }
 
-void initRookTable() {
+void moveGen::initRookTable() {
     for (int sq = 0; sq < 64; sq++) {
         uint64_t mask = rookMasks[sq];
         int bitCount = __builtin_popcountll(mask);
@@ -282,18 +280,28 @@ void moveGen::generateMoves(Board& board, MoveList& legalMoves) {
     legalMoves.clear();
     MoveList moves;
 
-    uint64_t kingBoard = (board.turn == WHITE) ? board.pieces[WK] : board.pieces[BK];
-    int kingSq = get_lsb(kingBoard);
+    const int sideToMove = board.turn;
 
-    genPawnMovesBB(board, moves);
+    genPawnMoves(board, moves);
     genKnightMoves(board, moves);
     genSlidingMoves(board, moves);
-    genKingMoves(kingSq, board, moves);
+    uint64_t kingBoard = (board.turn == WHITE) ? board.pieces[WK] : board.pieces[BK];
+    if (kingBoard) {
+        genKingMoves(get_lsb(kingBoard), board, moves);
+    }
 
     for (Move m : moves) {
         StateInfo s = board.makeMove(m);
-                
-        if (!isSquareAttacked(board, kingSq)) legalMoves.push_back(m);
+
+        uint64_t ownKingBoard = (sideToMove == WHITE) ? board.pieces[WK] : board.pieces[BK];
+        int ownKingSq = ownKingBoard ? get_lsb(ownKingBoard) : -1;
+
+        int restoreTurn = board.turn;
+        board.turn = sideToMove;
+        bool kingInCheck = (ownKingSq != -1) && isSquareAttacked(board, ownKingSq);
+        board.turn = restoreTurn;
+
+        if (!kingInCheck) legalMoves.push_back(m);
 
         board.unmakeMove(m, s);
     }
@@ -409,6 +417,7 @@ void moveGen::genKingMoves(int sq, Board& board, MoveList& moves) {
     uint64_t moveMask = kingMasks[sq];
 
     uint64_t myOccupancy = (board.turn == WHITE) ? board.whiteOcc : board.blackOcc;
+    moveMask &= ~myOccupancy;
     
     while (moveMask) {
         int to = get_lsb(moveMask);
@@ -423,8 +432,14 @@ void moveGen::genKingMoves(int sq, Board& board, MoveList& moves) {
         uint64_t betweenKingSide = (1ULL << 61) | (1ULL << 62);
         uint64_t betweenQueenSide = (1ULL << 57) | (1ULL << 58) | (1ULL << 59);
 
-        if (board.w_kingside && !kingSideAttacked && ((board.allOcc & betweenKingSide) == 0)) moves.push_back({sq, 62, CASTLE_KING});
-        if (board.w_queenside && !queenSideAttacked && ((board.allOcc & betweenQueenSide) == 0)) moves.push_back({sq, 58, CASTLE_QUEEN});
+        if (sq == 60 && board.squares[60] == W_KING && board.squares[63] == W_ROOK &&
+            board.w_kingside && !kingSideAttacked && ((board.allOcc & betweenKingSide) == 0)) {
+            moves.push_back({sq, 62, CASTLE_KING});
+        }
+        if (sq == 60 && board.squares[60] == W_KING && board.squares[56] == W_ROOK &&
+            board.w_queenside && !queenSideAttacked && ((board.allOcc & betweenQueenSide) == 0)) {
+            moves.push_back({sq, 58, CASTLE_QUEEN});
+        }
     } else {
         bool kingSideAttacked = isSquareAttacked(board, 4) || isSquareAttacked(board, 5) || isSquareAttacked(board, 6);
         bool queenSideAttacked = isSquareAttacked(board, 2) || isSquareAttacked(board, 3) || isSquareAttacked(board, 4);
@@ -432,8 +447,14 @@ void moveGen::genKingMoves(int sq, Board& board, MoveList& moves) {
         uint64_t betweenKingSide = (1ULL << 5) | (1ULL << 6);
         uint64_t betweenQueenSide = (1ULL << 1) | (1ULL << 2) | (1ULL << 3);
 
-        if (board.b_kingside && !kingSideAttacked && ((board.allOcc & betweenKingSide) == 0)) moves.push_back({sq, 6, CASTLE_KING});
-        if (board.b_queenside && !queenSideAttacked && ((board.allOcc & betweenQueenSide) == 0)) moves.push_back({sq, 2, CASTLE_QUEEN});
+        if (sq == 4 && board.squares[4] == B_KING && board.squares[7] == B_ROOK &&
+            board.b_kingside && !kingSideAttacked && ((board.allOcc & betweenKingSide) == 0)) {
+            moves.push_back({sq, 6, CASTLE_KING});
+        }
+        if (sq == 4 && board.squares[4] == B_KING && board.squares[0] == B_ROOK &&
+            board.b_queenside && !queenSideAttacked && ((board.allOcc & betweenQueenSide) == 0)) {
+            moves.push_back({sq, 2, CASTLE_QUEEN});
+        }
     }
 }
 
@@ -444,7 +465,7 @@ void addPromotions(int from, int to, MoveList& moves) {
     moves.push_back({from, to, PROMOTION_ROOK});
 }
 
-void genPawnMovesBB(Board& board, MoveList& moves) {
+void moveGen::genPawnMoves(Board& board, MoveList& moves) {
     uint64_t emptyMask = ~board.allOcc;
     uint64_t epMask = (board.enPassantSq == -1) ? 0 : (1ULL << board.enPassantSq);
 
@@ -459,6 +480,7 @@ void genPawnMovesBB(Board& board, MoveList& moves) {
         
         while (quietPush) {
             int to = get_lsb(quietPush);
+            
             moves.push_back({to+8, to});
             pop_bit(quietPush);
         }
@@ -473,7 +495,7 @@ void genPawnMovesBB(Board& board, MoveList& moves) {
 
         while (whiteDoubleMask) {
             int to = get_lsb(whiteDoubleMask);
-            moves.push_back({to+16,to});
+            moves.push_back({to+16,to, DOUBLE_PAWN_PUSH});
             pop_bit(whiteDoubleMask);
         }
 
@@ -481,7 +503,10 @@ void genPawnMovesBB(Board& board, MoveList& moves) {
         while (capL) {
             int to = get_lsb(capL);
             if ((1ULL << to) & RANK_8) addPromotions(to + 9, to, moves);
-            else moves.push_back({to + 9, to});
+            else {
+                if ((1ULL << to) == epMask) moves.push_back({to + 9, to, EN_PASSANT});
+                else moves.push_back({to + 9, to});
+            }
             pop_bit(capL); 
         }
 
@@ -489,7 +514,10 @@ void genPawnMovesBB(Board& board, MoveList& moves) {
         while (capR) {
             int to = get_lsb(capR);
             if ((1ULL << to) & RANK_8) addPromotions(to + 7, to, moves);
-            else moves.push_back({to + 7, to});
+            else {
+                if ((1ULL << to) == epMask) moves.push_back({to + 7, to, EN_PASSANT});
+                else moves.push_back({to + 7, to});
+            }
             pop_bit(capR);
         }
 
@@ -518,7 +546,7 @@ void genPawnMovesBB(Board& board, MoveList& moves) {
 
         while (blackDoubleMask) {
             int to = get_lsb(blackDoubleMask);
-            moves.push_back({to-16,to});
+            moves.push_back({to-16, to, DOUBLE_PAWN_PUSH});
             pop_bit(blackDoubleMask);
         }
 
@@ -526,7 +554,10 @@ void genPawnMovesBB(Board& board, MoveList& moves) {
         while (capR) {
             int to = get_lsb(capR);
             if ((1ULL << to) & RANK_1) addPromotions(to-7, to, moves);
-            else moves.push_back({to-7, to});
+            else {
+                if ((1ULL << to) == epMask) moves.push_back({to - 7, to, EN_PASSANT});
+                else moves.push_back({to - 7, to});
+            }
             pop_bit(capR); 
         }
 
@@ -534,7 +565,10 @@ void genPawnMovesBB(Board& board, MoveList& moves) {
         while (capL) {
             int to = get_lsb(capL);
             if ((1ULL << to) & RANK_1) addPromotions(to-9, to, moves);
-            else moves.push_back({to-9, to});
+            else {
+                if ((1ULL << to) == epMask) moves.push_back({to - 9, to, EN_PASSANT});
+                else moves.push_back({to - 9, to});
+            }
             pop_bit(capL);
         }
     }
@@ -546,9 +580,10 @@ bool moveGen::isSquareAttacked(Board& board, int sq) {
     uint64_t enemyBishops = (board.turn == BLACK) ? board.pieces[WB] : board.pieces[BB];
     uint64_t enemyRooks = (board.turn == BLACK) ? board.pieces[WR] : board.pieces[BR];
     uint64_t enemyQueens = (board.turn == BLACK) ? board.pieces[WQ] : board.pieces[BQ];
+    uint64_t enemyKing = (board.turn == BLACK) ? board.pieces[WK] : board.pieces[BK];
     
-    if (board.turn == BLACK && (pawnAttacks[0][sq] & board.pieces[WP])) return true;
-    if (board.turn == WHITE && (pawnAttacks[1][sq] & board.pieces[BP])) return true;
+    if (board.turn == BLACK && (pawnAttacks[1][sq] & board.pieces[WP])) return true;
+    if (board.turn == WHITE && (pawnAttacks[0][sq] & board.pieces[BP])) return true;
     
     uint64_t bishopBlockers = bishopMasks[sq] & board.allOcc;
     uint64_t bishopBitCount = __builtin_popcountll(bishopMasks[sq]);
@@ -559,6 +594,7 @@ bool moveGen::isSquareAttacked(Board& board, int sq) {
     uint64_t rookMagicIdx = (rookBlockers * RookMagics[sq]) >> (64 - rookBitCount);
 
     if (knightMasks[sq] & enemyKnights) return true;
+    if (kingMasks[sq] & enemyKing) return true;
     if (bishopTable[sq][bishopMagicIdx] & (enemyBishops | enemyQueens)) return true;
     if (rookTable[sq][rookMagicIdx] & (enemyRooks | enemyQueens)) return true;
 

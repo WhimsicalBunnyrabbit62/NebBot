@@ -48,6 +48,7 @@ public:
     void resetBb();
     void loadFromFen(std::string fen);
     int charToPiece(char c);
+    bool validate() const;
 };
 
 #endif

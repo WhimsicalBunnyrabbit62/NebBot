@@ -25,15 +25,54 @@ static int pieceToBbIndex(int piece) {
     }
 }
 
+bool Board::validate() const {
+    uint64_t expectedPieces[12] = {};
+
+    for (int sq = 0; sq < 64; sq++) {
+        int piece = squares[sq];
+        if (piece == EMPTY) continue;
+
+        int bbIdx = pieceToBbIndex(piece);
+        if (bbIdx < 0) return false;
+
+        expectedPieces[bbIdx] |= (1ULL << sq);
+    }
+
+    for (int i = 0; i < 12; i++) {
+        if (pieces[i] != expectedPieces[i]) return false;
+    }
+
+    uint64_t expectedWhite = expectedPieces[WP] | expectedPieces[WN] | expectedPieces[WB] |
+                             expectedPieces[WR] | expectedPieces[WQ] | expectedPieces[WK];
+    uint64_t expectedBlack = expectedPieces[BP] | expectedPieces[BN] | expectedPieces[BB] |
+                             expectedPieces[BR] | expectedPieces[BQ] | expectedPieces[BK];
+    uint64_t expectedAll = expectedWhite | expectedBlack;
+
+    if (whiteOcc != expectedWhite) return false;
+    if (blackOcc != expectedBlack) return false;
+    if (allOcc != expectedAll) return false;
+    if (whiteOcc & blackOcc) return false;
+
+    return true;
+}
+
 void Board::reset() {
     for (int i = 0; i < 64; i++) squares[i] = EMPTY;
+    for (int i = 0; i < 12; i++) pieces[i] = 0ULL;
 
     turn = WHITE;
     enPassantSq = -1;
     w_kingside = w_queenside = b_kingside = b_queenside = true;
+    whiteOcc = 0ULL;
+    blackOcc = 0ULL;
+    allOcc = 0ULL;
 }
 
 StateInfo Board::makeMove(Move m) {
+#ifndef NDEBUG
+    assert(validate());
+#endif
+
     StateInfo s = {squares[m.to], enPassantSq, w_kingside, w_queenside, b_kingside, b_queenside};
 
     uint64_t fromMask = 1ULL << (m.from);
@@ -76,6 +115,14 @@ StateInfo Board::makeMove(Move m) {
 
     if (piece == B_ROOK && original == 0 && m.flags != CASTLE_KING) {
         b_queenside = false;
+    }
+
+    if (s.capturedPiece == W_ROOK) {
+        if (m.to == 63) w_kingside = false;
+        if (m.to == 56) w_queenside = false;
+    } else if (s.capturedPiece == B_ROOK) {
+        if (m.to == 7) b_kingside = false;
+        if (m.to == 0) b_queenside = false;
     }
 
     if (m.flags == PROMOTION_QUEEN || m.flags == PROMOTION_ROOK ||
@@ -150,8 +197,8 @@ StateInfo Board::makeMove(Move m) {
         if (turn == WHITE) { 
             squares[61] = W_ROOK; squares[63] = EMPTY; 
 
-            uint64_t rookFromMask = 1ULL << 7;
-            uint64_t rookToMask = 1ULL << 5;
+            uint64_t rookFromMask = 1ULL << 63;
+            uint64_t rookToMask = 1ULL << 61;
 
             pieces[WR] &= ~rookFromMask;
             pieces[WR] |= rookToMask;
@@ -159,8 +206,8 @@ StateInfo Board::makeMove(Move m) {
             squares[5] = B_ROOK; 
             squares[7] = EMPTY; 
 
-            uint64_t rookFromMask = 1ULL << 63;
-            uint64_t rookToMask = 1ULL << 61;
+            uint64_t rookFromMask = 1ULL << 7;
+            uint64_t rookToMask = 1ULL << 5;
 
             pieces[BR] &= ~rookFromMask;
             pieces[BR] |= rookToMask;
@@ -171,8 +218,8 @@ StateInfo Board::makeMove(Move m) {
             squares[59] = W_ROOK; 
             squares[56] = EMPTY; 
 
-            uint64_t rookFromMask = 1ULL << 0;
-            uint64_t rookToMask = 1ULL << 3;
+            uint64_t rookFromMask = 1ULL << 56;
+            uint64_t rookToMask = 1ULL << 59;
 
             pieces[WR] &= ~rookFromMask;
             pieces[WR] |= rookToMask;
@@ -180,8 +227,8 @@ StateInfo Board::makeMove(Move m) {
             squares[3] = B_ROOK; 
             squares[0] = EMPTY; 
             
-            uint64_t rookFromMask = 1ULL << 56;
-            uint64_t rookToMask = 1ULL << 59;
+            uint64_t rookFromMask = 1ULL << 0;
+            uint64_t rookToMask = 1ULL << 3;
 
             pieces[BR] &= ~rookFromMask;
             pieces[BR] |= rookToMask;
@@ -194,11 +241,18 @@ StateInfo Board::makeMove(Move m) {
     whiteOcc = pieces[WP] | pieces[WN] | pieces[WB] | pieces[WR] | pieces[WQ] | pieces[WK];
     blackOcc = pieces[BP] | pieces[BN] | pieces[BB] | pieces[BR] | pieces[BQ] | pieces[BK];
     allOcc = whiteOcc | blackOcc;
+#ifndef NDEBUG
+    assert(validate());
+#endif
 
     return s;
 }
 
 void Board::unmakeMove(Move m, StateInfo s) {
+#ifndef NDEBUG
+    assert(validate());
+#endif
+
     turn = (turn == WHITE) ? BLACK : WHITE;
     int piece = squares[m.to];
 
@@ -228,13 +282,13 @@ void Board::unmakeMove(Move m, StateInfo s) {
 
             uint64_t kingFromMask = 1ULL << (62);
             uint64_t kingToMask = 1ULL << (60);
-            uint64_t rookFromMask = 1ULL << 7;
-            uint64_t rookToMask = 1ULL << 5;
+            uint64_t rookFromMask = 1ULL << 61;
+            uint64_t rookToMask = 1ULL << 63;
 
             pieces[WK] &= ~kingFromMask;
             pieces[WK] |= kingToMask;
-            pieces[WR] &= ~rookToMask;
-            pieces[WR] |= rookFromMask;
+            pieces[WR] &= ~rookFromMask;
+            pieces[WR] |= rookToMask;
         } else {
             squares[4] = B_KING;
             squares[6] = EMPTY;
@@ -243,13 +297,13 @@ void Board::unmakeMove(Move m, StateInfo s) {
 
             uint64_t kingFromMask = 1ULL << (6);
             uint64_t kingToMask = 1ULL << (4);
-            uint64_t rookFromMask = 1ULL << 63;
-            uint64_t rookToMask = 1ULL << 61;
+            uint64_t rookFromMask = 1ULL << 5;
+            uint64_t rookToMask = 1ULL << 7;
 
             pieces[BK] &= ~kingFromMask;
             pieces[BK] |= kingToMask;
-            pieces[BR] &= ~rookToMask;
-            pieces[BR] |= rookFromMask;
+            pieces[BR] &= ~rookFromMask;
+            pieces[BR] |= rookToMask;
         }
     } else if (m.flags == CASTLE_QUEEN) {
         if (turn == WHITE) {
@@ -260,13 +314,13 @@ void Board::unmakeMove(Move m, StateInfo s) {
 
             uint64_t kingFromMask = 1ULL << (58);
             uint64_t kingToMask = 1ULL << (60);
-            uint64_t rookFromMask = 1ULL << 0;
-            uint64_t rookToMask = 1ULL << 3;
+            uint64_t rookFromMask = 1ULL << 59;
+            uint64_t rookToMask = 1ULL << 56;
 
             pieces[WK] &= ~kingFromMask;
             pieces[WK] |= kingToMask;
-            pieces[WR] &= ~rookToMask;
-            pieces[WR] |= rookFromMask;
+            pieces[WR] &= ~rookFromMask;
+            pieces[WR] |= rookToMask;
         } else {
             squares[4] = B_KING;
             squares[2] = EMPTY;
@@ -275,13 +329,13 @@ void Board::unmakeMove(Move m, StateInfo s) {
 
             uint64_t kingFromMask = 1ULL << (2);
             uint64_t kingToMask = 1ULL << (4);
-            uint64_t rookFromMask = 1ULL << 56;
-            uint64_t rookToMask = 1ULL << 59;
+            uint64_t rookFromMask = 1ULL << 3;
+            uint64_t rookToMask = 1ULL << 0;
 
             pieces[BK] &= ~kingFromMask;
             pieces[BK] |= kingToMask;
-            pieces[BR] &= ~rookToMask;
-            pieces[BR] |= rookFromMask;
+            pieces[BR] &= ~rookFromMask;
+            pieces[BR] |= rookToMask;
         }
     } else if (m.flags == PROMOTION_QUEEN || m.flags == PROMOTION_ROOK ||
         m.flags == PROMOTION_BISHOP || m.flags == PROMOTION_KNIGHT) {
@@ -305,6 +359,9 @@ void Board::unmakeMove(Move m, StateInfo s) {
 
             pieces[promotionInd] &= ~toMask;
             pieces[WP] |= fromMask;
+            if (s.capturedPiece != EMPTY) {
+                pieces[pieceToBbIndex(s.capturedPiece)] |= toMask;
+            }
         } else {
             squares[m.from] = B_PAWN;
 
@@ -324,6 +381,9 @@ void Board::unmakeMove(Move m, StateInfo s) {
 
             pieces[promotionInd] &= ~toMask;
             pieces[BP] |= fromMask;
+            if (s.capturedPiece != EMPTY) {
+                pieces[pieceToBbIndex(s.capturedPiece)] |= toMask;
+            }
         }
     } else {
         uint64_t fromMask = 1ULL << (m.from);
@@ -351,6 +411,9 @@ void Board::unmakeMove(Move m, StateInfo s) {
     whiteOcc = pieces[WP] | pieces[WN] | pieces[WB] | pieces[WR] | pieces[WQ] | pieces[WK];
     blackOcc = pieces[BP] | pieces[BN] | pieces[BB] | pieces[BR] | pieces[BQ] | pieces[BK];
     allOcc = whiteOcc | blackOcc;
+#ifndef NDEBUG
+    assert(validate());
+#endif
 }
 
 void Board::resetBb() {

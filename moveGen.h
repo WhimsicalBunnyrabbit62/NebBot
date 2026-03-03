@@ -38,6 +38,9 @@ struct MoveList {
 class moveGen {
 
 public:
+    static int get_lsb(uint64_t bb);
+    static void pop_bit(uint64_t& bb);
+
     static void generateMoves(Board& board, MoveList& moves);
     static void generateCaptures(Board& board, MoveList& allMoves, MoveList& captures);
 
@@ -49,6 +52,11 @@ private:
     static void genKingMoves(int sq, Board& board, MoveList& moves);
     static void genSlidingMoves(Board& board, MoveList& moves);
     static void genKnightMoves(Board& board, MoveList& moves);
+
+    static uint64_t set_occupancy(int index, uint64_t mask);
+    static void initBishopTable();
+    static void initRookTable();
+    static void genPawnMoves(Board& board, MoveList& moves);
 };
 
 #endif

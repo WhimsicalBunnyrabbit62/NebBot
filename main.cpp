@@ -16,10 +16,12 @@ std::string toAlgebraic(int sq) {
 
 
 void init() {
-    moveGen::initRookTable();
+    moveGen::initAll();
 }
 
 int main() {
+    init();
+
     Board board;
     std::string line;
     srand(time(0));
@@ -37,10 +39,14 @@ int main() {
             MoveList moves;
             moveGen::generateMoves(board, moves);
 
-            std::cout << "Evaluation: " << eval::evaluate(board) << std::endl;
+            int evalWhite = eval::evaluate(board);
+            int evalSideToMove = evalWhite * board.turn;
+            std::cout << "Evaluation (white): " << evalWhite
+                      << " | Evaluation (side-to-move): " << evalSideToMove
+                      << std::endl;
 
             if (!moves.empty()) {
-                int maxTimeMs = 2500;
+                int maxTimeMs = 5000;
                 Move bestMove = search::startSearch(board, maxTimeMs);
 
                 std::cout << "bestmove " << toAlgebraic(bestMove.from) << toAlgebraic(bestMove.to); 

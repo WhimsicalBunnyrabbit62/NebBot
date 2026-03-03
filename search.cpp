@@ -31,14 +31,15 @@ Move search::startSearch(Board& board, int maxTimeMs) {
     auto start = std::chrono::steady_clock::now();
     nodesLookedAt = 0;
     stopSearch = false;
+    const int rootTurn = board.turn;
 
     MoveList allMoves;
     moveGen::generateMoves(board, allMoves);
 
     if (allMoves.empty()) {
-        int kingSq = moveGen::findKing(board, board.turn);
+        int kingSq = (board.turn == WHITE) ? moveGen::get_lsb(board.pieces[WK]) : moveGen::get_lsb(board.pieces[BK]);
         int enemy = (board.turn == WHITE) ? BLACK : WHITE;
-        if (kingSq != -1 && moveGen::isSquareAttacked(kingSq, enemy, board)) {
+        if (kingSq != -1 && moveGen::isSquareAttacked(board, kingSq)) {
             return {-1, -1, NONE, 0};
         } else {
             return {-1, -1, NONE, 0};
@@ -71,13 +72,17 @@ Move search::startSearch(Board& board, int maxTimeMs) {
 
         if (!stopSearch) {
             bestMove = curBestMove;
-            std::cout << "depth: " << curDepth << ". Best Eval: " << curBestEval << std::endl;
+            int whitePerspectiveEval = (rootTurn == WHITE) ? curBestEval : -curBestEval;
+            std::cout << "depth: " << curDepth
+                      << ". Best Eval (stm): " << curBestEval
+                      << " | Best Eval (white): " << whitePerspectiveEval
+                      << std::endl;
         } else {
             break;
         }
 
         auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - start).count();
-        if (elapsed > maxTimeMs/2) break;
+        if (elapsed >= maxTimeMs) break;
     }
 
     auto end = std::chrono::steady_clock::now();
@@ -102,19 +107,19 @@ int search::negamax(int depth, Board& board, int alpha, int beta, std::chrono::s
 
     if (stopSearch) return 0;
 
-    int best = NEG_INF;
-    MoveList moves;
-    moveGen::generateMoves(board, moves);
-
     if (depth <= 0) {
         return qSearch(board, alpha, beta);
     }
 
+    int best = NEG_INF;
+    MoveList moves;
+    moveGen::generateMoves(board, moves);
+
     if (moves.empty()) {
-        int kingSq = moveGen::findKing(board, board.turn);
+        int kingSq = (board.turn == WHITE) ? moveGen::get_lsb(board.pieces[WK]) : moveGen::get_lsb(board.pieces[BK]);
         int enemy = (board.turn == WHITE) ? BLACK : WHITE;
 
-        if (kingSq != -1 && moveGen::isSquareAttacked(kingSq, enemy, board)) {
+        if (kingSq != -1 && moveGen::isSquareAttacked(board, kingSq)) {
             return NEG_INF;
         } else {
             return 0;

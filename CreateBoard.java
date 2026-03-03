@@ -140,6 +140,7 @@ public class CreateBoard extends JPanel {
 
     public void makeHumanMove(int sourceTile, int clickedIndex) {
         int piece = board[sourceTile];
+        int capturedPiece = board[clickedIndex];
         boolean isPromotionMove = (piece == 1 && clickedIndex < 8) || (piece == 9 && clickedIndex >= 56);
 
         if ((board[sourceTile] == 1 || board[sourceTile] == 9) && clickedIndex == enPassantTarget) {
@@ -153,6 +154,14 @@ public class CreateBoard extends JPanel {
 
         if (piece == 4 && !castling && sourceTile == 56) {
             canCastleWhiteQueen = false;
+        }
+
+        if (capturedPiece == 4) {
+            if (clickedIndex == 63) canCastleWhiteKing = false;
+            if (clickedIndex == 56) canCastleWhiteQueen = false;
+        } else if (capturedPiece == 12) {
+            if (clickedIndex == 7) canCastleBlackKing = false;
+            if (clickedIndex == 0) canCastleBlackQueen = false;
         }
 
         if (castling) {
@@ -171,6 +180,14 @@ public class CreateBoard extends JPanel {
         if (isPromotionMove) {
             int promoteTo = choosePromotionPiece(currentTurn);
             board[clickedIndex] = promoteTo;
+        }
+
+        if (piece == 1 && sourceTile - clickedIndex == 16) {
+            enPassantTarget = sourceTile - 8;
+        } else if (piece == 9 && clickedIndex - sourceTile == 16) {
+            enPassantTarget = sourceTile + 8;
+        } else {
+            enPassantTarget = -1;
         }
 
         //String fen = getFen();
@@ -535,9 +552,12 @@ public class CreateBoard extends JPanel {
         if ((piece == 1 && from - to == 16) || (piece == 9 && to - from == 16)) {
             return DOUBLE_PAWN_PUSH;
         }
-        if (piece == 6 || piece == 14) {
-            if ((to == 62 || to == 6) && canCastleWhiteKing) return CASTLE_KING;
-            if ((to == 62 || to == 6) && canCastleWhiteQueen) return CASTLE_QUEEN;
+        if (piece == 6) {
+            if (to == 62 && canCastleWhiteKing) return CASTLE_KING;
+            if (to == 58 && canCastleWhiteQueen) return CASTLE_QUEEN;
+        } else if (piece == 14) {
+            if (to == 6 && canCastleBlackKing) return CASTLE_KING;
+            if (to == 2 && canCastleBlackQueen) return CASTLE_QUEEN;
         }
         if ((piece == 1 && to < 8) || (piece == 9 && to >= 56)) {
             return PROMOTION_QUEEN;
