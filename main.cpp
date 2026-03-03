@@ -17,6 +17,7 @@ std::string toAlgebraic(int sq) {
 
 void init() {
     moveGen::initAll();
+    eval::initAll();
 }
 
 int main() {

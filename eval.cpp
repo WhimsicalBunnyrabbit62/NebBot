@@ -159,36 +159,51 @@ static const int* eg_pesto_table[6] =
     eg_king_table
 };
 
-inline static int getPieceValue(int piece) {
-    switch (piece) {
-        case W_PAWN: case B_PAWN: return 100;
-        case W_KNIGHT: case B_KNIGHT: return 300;
-        case W_BISHOP: case B_BISHOP: return 300;
-        case W_ROOK: case B_ROOK: return 500;
-        case W_QUEEN: case B_QUEEN: return 900;
-        case W_KING: case B_KING: return 20000;
-        default: return 0;
-    }
+static const int materialValues[6] = { 100, 300, 300, 500, 900, 20000 };
+static const int phaseValues[6]    = { 0, 1, 1, 2, 4, 0 };
+
+static const uint64_t neighborFilesMask[8] = {
+    0x0202020202020202ULL, // File A neighbors: File B
+    0x0505050505050505ULL, // File B neighbors: File A + C
+    0x0A0A0A0A0A0A0A0AULL, // File C neighbors: File B + D
+    0x1414141414141414ULL, // File D neighbors: File C + E
+    0x2828282828282828ULL, // File E neighbors: File D + F
+    0x5050505050505050ULL, // File F neighbors: File E + G
+    0xA0A0A0A0A0A0A0A0ULL, // File G neighbors: File F + H
+    0x4040404040404040ULL  // File H neighbors: File G
+};
+
+static const int passed_mg[8] = { 0, 10, 20, 40, 80, 150, 250, 0 };
+static const int passed_eg[8] = { 0, 20, 40, 80, 150, 300, 500, 0 };
+
+uint64_t passedMaskWhite[64];
+uint64_t passedMaskBlack[64];
+
+void eval::initAll() {
+    initPassedMasks();
 }
 
-inline static int getMgScore(int piece) {
-    switch (piece) {
-        case W_KNIGHT: case B_KNIGHT: case W_BISHOP: case B_BISHOP: return 1;
-        case W_ROOK: case B_ROOK: return 2;
-        case W_QUEEN: case B_QUEEN: return 4;
-        default: return 0;
-    }
-}
+void eval::initPassedMasks() {
+    for (int sq = 0; sq < 64; sq++) {
+        uint64_t whiteMask = 0;
+        uint64_t blackMask = 0;
 
-int getTable(int piece) {
-    switch(piece) {
-        case W_PAWN: case B_PAWN: return 0;
-        case W_KNIGHT: case B_KNIGHT: return 1;
-        case W_BISHOP: case B_BISHOP: return 2;
-        case W_ROOK: case B_ROOK: return 3;
-        case W_QUEEN: case B_QUEEN: return 4;
-        case W_KING: case B_KING: return 5;
-        default: return 0;
+        int file = sq % 8;
+        int rank = sq / 8;
+
+        for (int r = 0; r < 8; r++) {
+            for (int f = file - 1; f <= file + 1; f++) {
+                if (f < 0 || f > 7) continue;
+
+                uint64_t bit = (1ULL << (r * 8 + f));
+
+                if (r < rank) whiteMask |= bit;
+                if (r > rank) blackMask |= bit;
+            }
+        }
+
+        passedMaskBlack[sq] = blackMask;
+        passedMaskWhite[sq] = whiteMask;
     }
 }
 
@@ -198,24 +213,88 @@ int eval::evaluate(Board& board) {
     int mgScore = 0;
     int egScore = 0;
 
-    for (int sq = 0; sq < 64; sq++) {
-        int piece = board.squares[sq];
-        if (piece == EMPTY) continue;
-        
-        mgPhase += getMgScore(piece);
-        if (mgPhase > 24) mgPhase = 24;
-        
-        int tableNum = getTable(piece);
-        int pstSq = (piece < 7) ? sq : (sq ^ 56);
-        egScore += (piece < 7) ? eg_pesto_table[tableNum][pstSq] : -eg_pesto_table[tableNum][pstSq];
-        mgScore += (piece < 7) ? mg_pesto_table[tableNum][pstSq] : -mg_pesto_table[tableNum][pstSq];
+    for (int i = 0; i < 6; i++) {
+        uint64_t wPieces = board.pieces[i]; 
+        int wCount = __builtin_popcountll(wPieces);
 
-        int value = getPieceValue(piece);
+        if (wPieces) {
+            score += (materialValues[i] * wCount);
+            mgPhase += (wCount * phaseValues[i]);
 
-        (piece < 7) ? score += value : score -= value;
+            while (wPieces) {
+                int sq = moveGen::get_lsb(wPieces);
+                
+                mgScore += mg_pesto_table[i][sq];
+                egScore += eg_pesto_table[i][sq];
+                moveGen::pop_bit(wPieces);
+            }
+        }
+
+
+        uint64_t bPieces = board.pieces[i + 6]; 
+        int bCount = __builtin_popcountll(bPieces);
+
+        if (bPieces) {
+            score -= (materialValues[i] * bCount);
+            mgPhase += (bCount * phaseValues[i]);
+
+            while (bPieces) {
+                int sq = moveGen::get_lsb(bPieces);
+
+                mgScore -= mg_pesto_table[i][sq ^ 56];
+                egScore -= eg_pesto_table[i][sq ^ 56];
+                moveGen::pop_bit(bPieces);
+            }
+        }
     }
 
-    score += ((mgScore * mgPhase) + (egScore * (24 - mgPhase))) / 24;
+    // random stuff
+    if (__builtin_popcountll(board.pieces[WB]) >= 2) score += 30;
+    if (__builtin_popcountll(board.pieces[BB]) >= 2) score -= 30;
+
+    const uint64_t allWhitePawns = board.pieces[WP];
+    const uint64_t allBlackPawns = board.pieces[BP];
+
+    uint64_t whitePawns = allWhitePawns;
+    while (whitePawns) {
+        int sq = moveGen::get_lsb(whitePawns);
+
+        int file = sq % 8;
+        int rank = sq / 8;
+
+        if (!(neighborFilesMask[file] & allWhitePawns)) {
+            mgScore -= 20;
+            egScore -= 25;
+        }
+        if (!(passedMaskWhite[sq] & allBlackPawns)) {
+            mgScore += passed_mg[7 - rank];
+            egScore += passed_eg[7 - rank];
+        }
+
+        moveGen::pop_bit(whitePawns);
+    }
+    
+    uint64_t blackPawns = allBlackPawns;
+    while (blackPawns) {
+        int sq = moveGen::get_lsb(blackPawns);
+
+        int file = sq % 8;
+        int rank = sq / 8;
+
+        if (!(neighborFilesMask[file] & allBlackPawns)) {
+            mgScore += 20;
+            egScore += 25;
+        }
+        if (!(passedMaskBlack[sq] & allWhitePawns)) {
+            mgScore -= passed_mg[rank];
+            egScore -= passed_eg[rank];
+        }
+
+        moveGen::pop_bit(blackPawns);
+    }
+
+    int phase = (mgPhase > 24) ? 24 : mgPhase;
+    score += ((mgScore * phase) + (egScore * (24 - phase))) / 24;
 
     return score;
 }

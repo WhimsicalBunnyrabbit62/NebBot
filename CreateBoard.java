@@ -22,6 +22,8 @@ public class CreateBoard extends JPanel {
     private static final int DOUBLE_PAWN_PUSH = 8;
     private int selectedTile = -1;
     private int sourceTile = -1;
+    private int lastMoveFrom = -1;
+    private int lastMoveTo = -1;
     private int currentTurn = 1; // 1 white : -1 black
     private boolean canCastleWhiteKing = true;
     private boolean canCastleBlackKing = true;
@@ -114,6 +116,9 @@ public class CreateBoard extends JPanel {
                                         repaint();
                                         return;
                                     }
+
+                                    lastMoveFrom = sourceTile;
+                                    lastMoveTo = clickedIndex;
                                 } else {
                                     System.out.println("ya move wong");
                                 }
@@ -311,6 +316,7 @@ public class CreateBoard extends JPanel {
     @Override
     protected void paintComponent(Graphics g) {
         super.paintComponent(g);
+        Graphics2D g2 = (Graphics2D) g;
         for (int i = 0; i < 64; i++) {
             int row = i / 8;
             int col = i % 8;
@@ -331,6 +337,12 @@ public class CreateBoard extends JPanel {
             int pieceValue = board[i];
             if (pieceValue != 0 && pieceImages[pieceValue] != null) {
                 g.drawImage(pieceImages[pieceValue], col * TILESIZE, row * TILESIZE, TILESIZE, TILESIZE, null);
+            }
+
+            if (i == lastMoveFrom || i == lastMoveTo) {
+                g2.setColor(new Color(65, 253, 254));
+                g2.setStroke(new BasicStroke(4));
+                g2.drawRect(col * TILESIZE + 2, row * TILESIZE + 2, TILESIZE - 4, TILESIZE - 4);
             }
         }
     }
@@ -777,6 +789,8 @@ public class CreateBoard extends JPanel {
 
         currentTurn = 1;
         sourceTile = -1;
+        lastMoveFrom = start;
+        lastMoveTo = end;
 
         repaint();
     }

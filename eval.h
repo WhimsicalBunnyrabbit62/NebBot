@@ -13,8 +13,12 @@ struct Attacker {
 
 class eval {
 public: 
+    static void initAll();
     static int evaluate(Board& board);
-    static int exchangeEvaluation(Board& board, int from);
+
+private:
+    static void initPassedMasks();
 };
+
 
 #endif
