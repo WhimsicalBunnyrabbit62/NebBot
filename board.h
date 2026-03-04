@@ -2,6 +2,7 @@
 #define BOARD_H
 
 #include <string>
+#include <vector>
 #include "Types.h"
 
 struct StateInfo {
@@ -36,6 +37,8 @@ public:
     uint64_t whiteOcc; // pieces[WP] | pieces[WN] | pieces[WB] | pieces[WR] | pieces[WQ] | pieces[WK];
     uint64_t blackOcc; // = pieces[BP] | pieces[BN] | pieces[BB] | pieces[BR] | pieces[BQ] | pieces[BK];
     uint64_t allOcc;
+    uint64_t currentHash;
+    std::vector<uint64_t> hashHistory;
 
     bool w_kingside, w_queenside;
     bool b_kingside, b_queenside;
@@ -49,6 +52,10 @@ public:
     void loadFromFen(std::string fen);
     int charToPiece(char c);
     bool validate() const;
+    bool isThreefold() const;
+
+    static void initAll();
+    uint64_t generateHash() const;
 };
 
 #endif

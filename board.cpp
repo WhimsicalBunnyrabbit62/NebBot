@@ -2,9 +2,63 @@
 #include <string>
 #include <sstream>
 #include <cassert>
+#include <random>
+
+uint64_t pieceKeys[12][64];
+uint64_t sideKey;
+uint64_t castleKeys[16];
+uint64_t enPassantKeys[8];
+static void initZobrist();
+
+static int castleRightsMask(const Board& board) {
+    int rights = 0;
+    if (board.w_kingside) rights |= 1;
+    if (board.w_queenside) rights |= 2;
+    if (board.b_kingside) rights |= 4;
+    if (board.b_queenside) rights |= 8;
+    return rights;
+}
 
 Board::Board() {
     reset();
+}
+
+void Board::initAll() {
+    initZobrist();
+}
+
+static void initZobrist() {
+    std::mt19937_64 rng(123456789ULL);
+
+    for (int p = 0; p < 12; p++) {
+        for (int s = 0; s < 64; s++) {
+            pieceKeys[p][s] = rng();
+        }
+    }
+
+    sideKey = rng();
+    for (int i = 0; i < 16; i++) castleKeys[i] = rng();
+    for (int i = 0; i < 8; i++) enPassantKeys[i] = rng();
+}
+
+uint64_t Board::generateHash() const {
+    uint64_t posKey = 0;
+
+    for (int sq = 0; sq < 64; sq++) {
+        int piece = squares[sq];
+        if (piece != EMPTY) {
+            int bbIdx = pieceToBbIndex(piece);
+            if (bbIdx >= 0) {
+                posKey ^= pieceKeys[bbIdx][sq];
+            }
+        }
+    }
+
+    posKey ^= castleKeys[castleRightsMask(*this)];
+    if (turn == BLACK) posKey ^= sideKey;
+    if (enPassantSq != -1) posKey ^= enPassantKeys[enPassantSq % 8];
+
+    return posKey;
 }
 
 static int pieceToBbIndex(int piece) {
@@ -56,6 +110,22 @@ bool Board::validate() const {
     return true;
 }
 
+bool Board::isThreefold() const {
+    if (hashHistory.empty()) return false;
+
+    const uint64_t key = hashHistory.back();
+    int matches = 0;
+
+    for (int i = static_cast<int>(hashHistory.size()) - 1; i >= 0; i -= 2) {
+        if (hashHistory[i] == key) {
+            matches++;
+            if (matches >= 3) return true;
+        }
+    }
+
+    return false;
+}
+
 void Board::reset() {
     for (int i = 0; i < 64; i++) squares[i] = EMPTY;
     for (int i = 0; i < 12; i++) pieces[i] = 0ULL;
@@ -66,6 +136,8 @@ void Board::reset() {
     whiteOcc = 0ULL;
     blackOcc = 0ULL;
     allOcc = 0ULL;
+    currentHash = 0ULL;
+    hashHistory.clear();
 }
 
 StateInfo Board::makeMove(Move m) {
@@ -241,6 +313,8 @@ StateInfo Board::makeMove(Move m) {
     whiteOcc = pieces[WP] | pieces[WN] | pieces[WB] | pieces[WR] | pieces[WQ] | pieces[WK];
     blackOcc = pieces[BP] | pieces[BN] | pieces[BB] | pieces[BR] | pieces[BQ] | pieces[BK];
     allOcc = whiteOcc | blackOcc;
+    currentHash = generateHash();
+    hashHistory.push_back(currentHash);
 #ifndef NDEBUG
     assert(validate());
 #endif
@@ -411,6 +485,10 @@ void Board::unmakeMove(Move m, StateInfo s) {
     whiteOcc = pieces[WP] | pieces[WN] | pieces[WB] | pieces[WR] | pieces[WQ] | pieces[WK];
     blackOcc = pieces[BP] | pieces[BN] | pieces[BB] | pieces[BR] | pieces[BQ] | pieces[BK];
     allOcc = whiteOcc | blackOcc;
+    if (!hashHistory.empty()) {
+        hashHistory.pop_back();
+    }
+    currentHash = hashHistory.empty() ? generateHash() : hashHistory.back();
 #ifndef NDEBUG
     assert(validate());
 #endif
@@ -424,6 +502,8 @@ void Board::resetBb() {
     whiteOcc = 0ULL;
     blackOcc = 0ULL;
     allOcc = 0ULL;
+    currentHash = 0ULL;
+    hashHistory.clear();
 }
 
 void Board::loadFromFen(std::string fen) {
@@ -474,6 +554,9 @@ void Board::loadFromFen(std::string fen) {
     allOcc = whiteOcc | blackOcc;
 
     turn = (activeColor == "w") ? WHITE : BLACK;
+    currentHash = generateHash();
+    hashHistory.clear();
+    hashHistory.push_back(currentHash);
 }
 
 int Board::charToPiece(char c) {

@@ -107,6 +107,8 @@ int search::negamax(int depth, Board& board, int alpha, int beta, std::chrono::s
 
     if (stopSearch) return 0;
 
+    if (board.isThreefold()) return 0;
+
     if (depth <= 0) {
         return qSearch(board, alpha, beta);
     }
@@ -156,6 +158,8 @@ int getMvvLvaScore(Board& board, Move m) {
 }
 
 int search::qSearch(Board& board, int alpha, int beta) {
+    if (board.isThreefold()) return 0;
+
     int standPat = eval::evaluate(board) * board.turn; // Eval if player does nothing
 
     if (standPat >= beta) return beta; // beta -> lowest score opponent will let us reach
