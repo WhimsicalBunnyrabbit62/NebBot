@@ -48,7 +48,7 @@ int main() {
                       << std::endl;
 
             if (!moves.empty()) {
-                int maxTimeMs = 3000;
+                int maxTimeMs = 2000;
                 Move bestMove = search::startSearch(board, maxTimeMs);
 
                 std::cout << "bestmove " << toAlgebraic(bestMove.from) << toAlgebraic(bestMove.to); 

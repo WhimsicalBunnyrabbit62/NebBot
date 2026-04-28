@@ -25,6 +25,7 @@ public class CreateBoard extends JPanel {
     private int lastMoveFrom = -1;
     private int lastMoveTo = -1;
     private int currentTurn = 1; // 1 white : -1 black
+    private boolean playerStarting = false;
     private boolean canCastleWhiteKing = true;
     private boolean canCastleBlackKing = true;
     private boolean canCastleWhiteQueen = true;
@@ -36,7 +37,7 @@ public class CreateBoard extends JPanel {
 
     int flags = 0;
 
-    private int[] board = {
+    private final int[] board = {
         12, 10, 11, 13, 14, 11, 10, 12, 
         9,  9,  9,  9,  9,  9,  9,  9,   // black back rank
         0,  0,  0,  0,  0,  0,  0,  0,   // black pawns
@@ -46,18 +47,17 @@ public class CreateBoard extends JPanel {
         1,  1,  1,  1,  1,  1,  1,  1,   // white pawns
         4,  2,  3,  5,  6,  3,  2,  4    // white back rank
     };
+
     private Image[] pieceImages = new Image[15];
 
     public CreateBoard() {
         loadImages();
 
-
         bridge.startListening(firstListener);
         firstListener = false;
         bridge.sendCommand("uci");
         bridge.sendCommand("isready");
-        bridge.sendCommand("position fen rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
-
+        bridge.sendCommand("position fen " + getFen());
 
         addMouseListener(new MouseAdapter() {
             @Override
@@ -65,10 +65,12 @@ public class CreateBoard extends JPanel {
                 int col = e.getX() / TILESIZE;
                 int row = e.getY() / TILESIZE;
                 //System.out.println("col: " + col + "row: " + row);
-                
-                if (currentTurn == 1) {
+
+                int playerMove = (playerStarting) ? 1 : -1;
+                if (currentTurn == playerMove) {
                     if (col >= 0 && col < 8 && row >= 0 && row < 8) {
                     int clickedIndex = row * 8 + col;
+                    if (!playerStarting) clickedIndex = 63 - clickedIndex;
                     
                         if (sourceTile == -1) {
                             if (board[clickedIndex] != 0) {
@@ -127,18 +129,19 @@ public class CreateBoard extends JPanel {
                                 castling = false;
                                 sourceTile = -1;
                                 repaint();
-
-                                if (currentTurn == -1) {
-                                    runEngineTurn();
-                                    totalTurns++;
-                                }
                             }
                         }
                     }
-                } 
+                }
                 
                 //System.out.println("Selected: " + selectedTile);
                 repaint();
+
+                int engineMove = playerMove * -1;
+                if (currentTurn == engineMove) {
+                    runEngineTurn();
+                    totalTurns++;
+                }
             }
         });
     }
@@ -195,9 +198,7 @@ public class CreateBoard extends JPanel {
             enPassantTarget = -1;
         }
 
-        //String fen = getFen();
-        //bridge.sendCommand("position fen " + fen);
-        //bridge.sendCommand("perft 6");
+        // bridge.sendCommand("perft 6"); 
 
         currentTurn = (currentTurn == 1) ? -1 : 1;
         castling = false;
@@ -275,16 +276,15 @@ public class CreateBoard extends JPanel {
         }
     }
 
-    public void unmakeHumanMove(int sourceTile, int clickedIndex, int capturedPiece, int oldEP, boolean WKS, boolean WQS, boolean BKS, boolean BQS, int flags) {
-        currentTurn = (currentTurn == 1) ? -1 : 1;
-    }
-
     private void runEngineTurn() {
+        System.out.print("it is now ");
+        if (currentTurn == 1) System.out.println("whites turn");
+        else System.out.println("blacks turn");
+
         String fen = getFen();        
         bridge.sendCommand("position fen " + fen);
         bridge.sendCommand("go");
         new Thread(() -> {
-            //bridge.sendCommand("perft 6");
             String bestMove = bridge.waitForBestMove();
 
             if (bestMove == null || bestMove.contains("none")) {
@@ -295,7 +295,6 @@ public class CreateBoard extends JPanel {
             SwingUtilities.invokeLater(() -> makeEngineMove(bestMove));
         }).start();
 
-        //bridge.sendCommand("perft");
     }
 
     private void loadImages() {
@@ -318,8 +317,9 @@ public class CreateBoard extends JPanel {
         super.paintComponent(g);
         Graphics2D g2 = (Graphics2D) g;
         for (int i = 0; i < 64; i++) {
-            int row = i / 8;
-            int col = i % 8;
+            int displayIndex = playerStarting ? i : 63 - i;
+            int row = displayIndex / 8;
+            int col = displayIndex % 8;
 
             g.setColor((row+col) % 2 == 0 ? new Color(235, 235, 208) : new Color(119, 148, 85));
             g.fillRect(col * TILESIZE, row * TILESIZE, TILESIZE, TILESIZE);
@@ -344,6 +344,11 @@ public class CreateBoard extends JPanel {
                 g2.setStroke(new BasicStroke(4));
                 g2.drawRect(col * TILESIZE + 2, row * TILESIZE + 2, TILESIZE - 4, TILESIZE - 4);
             }
+
+            // if (row == 0 && col == 0) {
+            //     g.setColor(new Color(0, 0, 0, 128));
+            //     g.fillRect(col * TILESIZE, row * TILESIZE, TILESIZE, TILESIZE);
+            // }
         }
     }
 
@@ -465,8 +470,6 @@ public class CreateBoard extends JPanel {
 
         return true;
     }
-
-
 
     private boolean isSquareAttacked(int targetSq, int attackerColor) {
         // knight check
@@ -787,7 +790,7 @@ public class CreateBoard extends JPanel {
             enPassantTarget = -1;
         }
 
-        currentTurn = 1;
+        currentTurn = (currentTurn == 1) ? -1 : 1;
         sourceTile = -1;
         lastMoveFrom = start;
         lastMoveTo = end;
@@ -802,5 +805,6 @@ public class CreateBoard extends JPanel {
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         frame.setLocationRelativeTo(null);
         frame.setVisible(true);
+
     }
 }  

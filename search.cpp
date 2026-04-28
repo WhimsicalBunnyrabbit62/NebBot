@@ -113,7 +113,7 @@ int search::negamax(int depth, Board& board, int alpha, int beta, std::chrono::s
         return qSearch(board, alpha, beta);
     }
 
-    int best = NEG_INF;
+    int best = NEG_INF - depth;
     MoveList moves;
     moveGen::generateMoves(board, moves);
 
@@ -122,7 +122,7 @@ int search::negamax(int depth, Board& board, int alpha, int beta, std::chrono::s
         int enemy = (board.turn == WHITE) ? BLACK : WHITE;
 
         if (kingSq != -1 && moveGen::isSquareAttacked(board, kingSq)) {
-            return NEG_INF;
+            return NEG_INF - depth;
         } else {
             return 0;
         }

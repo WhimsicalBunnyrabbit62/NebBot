@@ -12,6 +12,7 @@ struct StateInfo {
    bool w_queenside;
    bool b_kingside;
    bool b_queenside;
+   uint64_t previousHash;
 };
 
 class Board{

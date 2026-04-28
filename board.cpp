@@ -3,6 +3,7 @@
 #include <sstream>
 #include <cassert>
 #include <random>
+#include <iostream>
 
 uint64_t pieceKeys[12][64];
 uint64_t sideKey;
@@ -17,6 +18,39 @@ static int castleRightsMask(const Board& board) {
     if (board.b_kingside) rights |= 4;
     if (board.b_queenside) rights |= 8;
     return rights;
+}
+
+static int pieceToBbIndex(int piece) {
+    switch(piece) {
+        case W_PAWN: return 0;
+        case W_KNIGHT: return 1;
+        case W_BISHOP: return 2;
+        case W_ROOK: return 3;
+        case W_QUEEN: return 4;
+        case W_KING: return 5;
+        case B_PAWN: return 6;
+        case B_KNIGHT: return 7;
+        case B_BISHOP: return 8;
+        case B_ROOK: return 9;
+        case B_QUEEN: return 10;
+        case B_KING: return 11;
+        default: return -1;
+    }
+}
+
+static int promotionPieceForMove(int sideToMove, int moveFlag) {
+    if (sideToMove == WHITE) {
+        if (moveFlag == PROMOTION_QUEEN) return W_QUEEN;
+        if (moveFlag == PROMOTION_ROOK) return W_ROOK;
+        if (moveFlag == PROMOTION_BISHOP) return W_BISHOP;
+        if (moveFlag == PROMOTION_KNIGHT) return W_KNIGHT;
+    } else {
+        if (moveFlag == PROMOTION_QUEEN) return B_QUEEN;
+        if (moveFlag == PROMOTION_ROOK) return B_ROOK;
+        if (moveFlag == PROMOTION_BISHOP) return B_BISHOP;
+        if (moveFlag == PROMOTION_KNIGHT) return B_KNIGHT;
+    }
+    return EMPTY;
 }
 
 Board::Board() {
@@ -59,24 +93,6 @@ uint64_t Board::generateHash() const {
     if (enPassantSq != -1) posKey ^= enPassantKeys[enPassantSq % 8];
 
     return posKey;
-}
-
-static int pieceToBbIndex(int piece) {
-    switch(piece) {
-        case W_PAWN: return 0;
-        case W_KNIGHT: return 1;
-        case W_BISHOP: return 2;
-        case W_ROOK: return 3;
-        case W_QUEEN: return 4;
-        case W_KING: return 5;
-        case B_PAWN: return 6;
-        case B_KNIGHT: return 7;
-        case B_BISHOP: return 8;
-        case B_ROOK: return 9;
-        case B_QUEEN: return 10;
-        case B_KING: return 11;
-        default: return -1;
-    }
 }
 
 bool Board::validate() const {
@@ -145,16 +161,70 @@ StateInfo Board::makeMove(Move m) {
     assert(validate());
 #endif
 
-    StateInfo s = {squares[m.to], enPassantSq, w_kingside, w_queenside, b_kingside, b_queenside};
+    StateInfo s = {
+        squares[m.to],
+        enPassantSq,
+        w_kingside,
+        w_queenside,
+        b_kingside,
+        b_queenside,
+        currentHash
+    };
+    if (m.flags == EN_PASSANT) {
+        s.capturedPiece = (turn == WHITE) ? B_PAWN : W_PAWN;
+    }
 
-    uint64_t fromMask = 1ULL << (m.from);
-    uint64_t toMask = 1ULL << (m.to);
+    const int oldCastleMask = castleRightsMask(*this);
+    const int oldEpSq = enPassantSq;
+    uint64_t newHash = currentHash;
 
-    int original = m.from;
-    int piece = squares[m.from];
-    int movingInd = pieceToBbIndex(piece);
+    const uint64_t fromMask = 1ULL << m.from;
+    const uint64_t toMask = 1ULL << m.to;
+
+    const int original = m.from;
+    const int piece = squares[m.from];
+    const int movingInd = pieceToBbIndex(piece);
     assert(movingInd >= 0);
     if (movingInd < 0) return s;
+
+    const int promoPiece = promotionPieceForMove(turn, m.flags);
+    const int movedToPiece = (promoPiece != EMPTY) ? promoPiece : piece;
+    const int movedToIdx = pieceToBbIndex(movedToPiece);
+
+    if (oldEpSq != -1) newHash ^= enPassantKeys[oldEpSq % 8];
+    newHash ^= castleKeys[oldCastleMask];
+    newHash ^= sideKey;
+
+    newHash ^= pieceKeys[movingInd][m.from];
+    if (movedToIdx >= 0) {
+        newHash ^= pieceKeys[movedToIdx][m.to];
+    }
+
+    if (s.capturedPiece != EMPTY) {
+        const int capSq = (m.flags == EN_PASSANT) ? ((turn == WHITE) ? (m.to + 8) : (m.to - 8)) : m.to;
+        const int capIdx = pieceToBbIndex(s.capturedPiece);
+        if (capIdx >= 0) {
+            newHash ^= pieceKeys[capIdx][capSq];
+        }
+    }
+
+    if (m.flags == CASTLE_KING) {
+        if (turn == WHITE) {
+            newHash ^= pieceKeys[WR][63];
+            newHash ^= pieceKeys[WR][61];
+        } else {
+            newHash ^= pieceKeys[BR][7];
+            newHash ^= pieceKeys[BR][5];
+        }
+    } else if (m.flags == CASTLE_QUEEN) {
+        if (turn == WHITE) {
+            newHash ^= pieceKeys[WR][56];
+            newHash ^= pieceKeys[WR][59];
+        } else {
+            newHash ^= pieceKeys[BR][0];
+            newHash ^= pieceKeys[BR][3];
+        }
+    }
     pieces[movingInd] &= ~fromMask;
     pieces[movingInd] |= toMask;
 
@@ -308,14 +378,21 @@ StateInfo Board::makeMove(Move m) {
     }
 
     if (m.flags != DOUBLE_PAWN_PUSH) enPassantSq = -1;
+
+    newHash ^= castleKeys[castleRightsMask(*this)];
+    if (enPassantSq != -1) {
+        newHash ^= enPassantKeys[enPassantSq % 8];
+    }
+
     turn = (turn == WHITE) ? BLACK : WHITE; 
 
     whiteOcc = pieces[WP] | pieces[WN] | pieces[WB] | pieces[WR] | pieces[WQ] | pieces[WK];
     blackOcc = pieces[BP] | pieces[BN] | pieces[BB] | pieces[BR] | pieces[BQ] | pieces[BK];
     allOcc = whiteOcc | blackOcc;
-    currentHash = generateHash();
+    currentHash = newHash;
     hashHistory.push_back(currentHash);
 #ifndef NDEBUG
+    assert(currentHash == generateHash());
     assert(validate());
 #endif
 
@@ -488,8 +565,13 @@ void Board::unmakeMove(Move m, StateInfo s) {
     if (!hashHistory.empty()) {
         hashHistory.pop_back();
     }
-    currentHash = hashHistory.empty() ? generateHash() : hashHistory.back();
+    currentHash = s.previousHash;
+    if (hashHistory.empty()) {
+        hashHistory.push_back(currentHash);
+    }
 #ifndef NDEBUG
+    assert(currentHash == generateHash());
+    assert(!hashHistory.empty() && hashHistory.back() == currentHash);
     assert(validate());
 #endif
 }
