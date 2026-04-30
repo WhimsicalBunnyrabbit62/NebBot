@@ -8,6 +8,7 @@
 #include <climits>
 #include <chrono>
 #include <algorithm>
+#include <random>
 
 static constexpr int NEG_INF = -30000;
 static constexpr int POS_INF = 30000;
@@ -15,6 +16,8 @@ static constexpr int POS_INF = 30000;
 static int nodesLookedAt = 0;
 bool stopSearch = false;
 Move curBestMove;
+
+static TableEntry TT[8388608];
 
 static const int MvvLvaScores[7][7] = {
 // Attackers: [placeholder, P, N, B, R, Q, K]
@@ -27,6 +30,12 @@ static const int MvvLvaScores[7][7] = {
     {0, 65, 64, 63, 62, 61, 60}    // Victim: K
 };
 
+static int counter = 0;
+
+void search::initAll() {
+    memset(TT, 0, sizeof(TT));
+}
+
 Move search::startSearch(Board& board, int maxTimeMs) {
     auto start = std::chrono::steady_clock::now();
     nodesLookedAt = 0;
@@ -35,6 +44,20 @@ Move search::startSearch(Board& board, int maxTimeMs) {
 
     MoveList allMoves;
     moveGen::generateMoves(board, allMoves);
+
+    uint64_t hash = board.currentHash;
+    int index = hash & 0x7FFFFF;
+    TableEntry entry = TT[index];
+
+    if (entry.hash != 0 && entry.hash == hash) {
+        counter++;
+        for (int i = 0; i < allMoves.size(); i++) {
+            if (allMoves.moves[i] == entry.best) {
+                std::swap(allMoves.moves[0], allMoves.moves[i]);
+                break;
+            }
+        }
+    }
 
     if (allMoves.empty()) {
         int kingSq = (board.turn == WHITE) ? moveGen::get_lsb(board.pieces[WK]) : moveGen::get_lsb(board.pieces[BK]);
@@ -55,22 +78,27 @@ Move search::startSearch(Board& board, int maxTimeMs) {
         int curBestEval = NEG_INF;
         Move curBestMove;
 
-        for (Move m : allMoves) {
+        int bestInd = 0;
+        for (int i = 0; i < allMoves.size(); i++) {
+            Move m = allMoves.moves[i];
             StateInfo s = board.makeMove(m);
 
             nodesLookedAt++;
-            int score = -negamax(curDepth - 1, board, NEG_INF, POS_INF, start, maxTimeMs);
+            int score = -negamax(curDepth - 1, board, NEG_INF, POS_INF, start, maxTimeMs, true);
+            
             board.unmakeMove(m, s);
 
             if (stopSearch) break;
             
             if (score > curBestEval) {
                 curBestEval = score;
+                bestInd = i;
                 curBestMove = m;
             }
         }
 
         if (!stopSearch) {
+            std::swap(allMoves.moves[0], allMoves.moves[bestInd]);
             bestMove = curBestMove;
             int whitePerspectiveEval = (rootTurn == WHITE) ? curBestEval : -curBestEval;
             std::cout << "depth: " << curDepth
@@ -90,11 +118,27 @@ Move search::startSearch(Board& board, int maxTimeMs) {
 
     std::cout << "Time taken (Engine Move) (ms): " << diff.count() << std::endl;
     std::cout << "Nodes looked at (Engine Move): " << nodesLookedAt << std::endl;
+    std::cout << "TT got " << counter << " hits." << std::endl;
 
     return bestMove;
 }
 
-int search::negamax(int depth, Board& board, int alpha, int beta, std::chrono::steady_clock::time_point startTime, int limit) {
+void storeEntry(uint64_t hash, int eval, Move best, int depth, BoundType b) {
+    int index = hash & 0x7FFFFF;
+    
+    TT[index] = {hash, eval, best, depth, b};
+} 
+
+bool nonKPPresent(Board& board) {
+    for (int i = 1; i < 11; i++) {
+        if (i == 5 || i == 6) continue;
+        if (board.pieces[i] != 0ULL) return true;
+    }
+
+    return false;
+}
+
+int search::negamax(int depth, Board& board, int alpha, int beta, std::chrono::steady_clock::time_point startTime, int limit, bool allowNullMove) {
     // duration cast -> convert nanoseconds to manageable numbers in this case ms
     // chrono steady clock now -> get current time 
     // - start -> difference from the time at the beginning
@@ -109,17 +153,44 @@ int search::negamax(int depth, Board& board, int alpha, int beta, std::chrono::s
 
     if (board.isThreefold()) return 0;
 
-    if (depth <= 0) {
-        return qSearch(board, alpha, beta);
-    }
-
     int best = NEG_INF - depth;
     MoveList moves;
     moveGen::generateMoves(board, moves);
 
+    uint64_t hash = board.currentHash;
+    int index = hash & 0x7FFFFF;
+    TableEntry entry = TT[index];
+
+    if (entry.hash != 0 && entry.hash == hash) {
+        counter++;
+        if (entry.depth >= depth) {
+            if (entry.boundType == EXACT) {
+                return entry.eval;
+            } else if (entry.boundType == LOWER_BOUND && entry.eval > alpha) {
+                alpha = entry.eval;
+            } else if (entry.boundType == UPPER_BOUND && entry.eval < beta) {
+                beta = entry.eval;
+            }
+
+            if (alpha >= beta) {
+                return entry.eval;
+            }
+        }
+
+        for (int i = 0; i < moves.size(); i++) {
+            if (moves.moves[i] == entry.best) {
+                std::swap(moves.moves[0], moves.moves[i]);
+                break;
+            }
+        }
+    }
+
+    if (depth <= 0) {
+        return qSearch(board, alpha, beta);
+    }
+
     if (moves.empty()) {
         int kingSq = (board.turn == WHITE) ? moveGen::get_lsb(board.pieces[WK]) : moveGen::get_lsb(board.pieces[BK]);
-        int enemy = (board.turn == WHITE) ? BLACK : WHITE;
 
         if (kingSq != -1 && moveGen::isSquareAttacked(board, kingSq)) {
             return NEG_INF - depth;
@@ -127,20 +198,62 @@ int search::negamax(int depth, Board& board, int alpha, int beta, std::chrono::s
             return 0;
         }
     }
+    
+    int originalAlpha = alpha; 
+    Move bestMove = moves.moves[0];
+
+    int kingSq = (board.turn == WHITE) ? moveGen::get_lsb(board.pieces[WK]) : moveGen::get_lsb(board.pieces[BK]);
+    bool otherPiecesPresent = nonKPPresent(board);
+    int originalTurn = board.turn;
+    int originalEPsq = board.enPassantSq;
+    uint64_t originalHash = board.currentHash;
+
+    if ((kingSq != -1 && !moveGen::isSquareAttacked(board, kingSq)) && depth >= 3 && otherPiecesPresent && allowNullMove) {
+        board.turn *= -1;
+        board.currentHash ^= sideKey;
+        if (board.enPassantSq != -1) {
+            board.currentHash ^= enPassantKeys[board.enPassantSq % 8];
+            board.enPassantSq = -1;
+        }
+
+        // zero window for more pruning
+        if (-negamax(depth - 3, board, -beta, -beta + 1, startTime, limit, false) >= beta) {
+            board.turn = originalTurn;
+            board.enPassantSq = originalEPsq;
+            board.currentHash = originalHash;
+
+            return beta;
+        }
+    }
+
+    board.turn = originalTurn;
+    board.enPassantSq = originalEPsq;
+    board.currentHash = originalHash;
 
     for (Move m : moves) {
         StateInfo s = board.makeMove(m);
         
         nodesLookedAt++;
 
-        int score = -negamax(depth-1, board, -beta, -alpha, startTime, limit);
+        int score = -negamax(depth - 1, board, -beta, -alpha, startTime, limit, true);
         board.unmakeMove(m, s);
 
-        best = std::max(best, score);
+        // best = std::max(best, score);
+        if (score > best) {
+            best = score;
+            bestMove = m;
+        }
+
         alpha = std::max(alpha, score);
 
         if (alpha >= beta) break;
     }
+
+    BoundType bound;
+    if (best <= originalAlpha) bound = UPPER_BOUND;
+    else if (best >= beta) bound = LOWER_BOUND;
+    else bound = EXACT;
+    storeEntry(board.currentHash, best, bestMove, depth, bound);
 
     return best;
 }

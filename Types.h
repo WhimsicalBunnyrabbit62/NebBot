@@ -28,6 +28,10 @@ struct Move {
     int to;
     int flags = 0;
     int score = 0;
+
+    bool operator==(const Move& other) const {
+        return from == other.from && to == other.to && flags == other.flags;
+    }
 };
 
 inline bool isEnemy(int myPiece, int targetPiece) {

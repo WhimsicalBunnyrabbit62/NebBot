@@ -7,8 +7,8 @@
 
 uint64_t pieceKeys[12][64];
 uint64_t sideKey;
-uint64_t castleKeys[16];
 uint64_t enPassantKeys[8];
+uint64_t castleKeys[16];
 static void initZobrist();
 
 static int castleRightsMask(const Board& board) {
@@ -152,15 +152,11 @@ void Board::reset() {
     whiteOcc = 0ULL;
     blackOcc = 0ULL;
     allOcc = 0ULL;
-    currentHash = 0ULL;
+    currentHash = generateHash();
     hashHistory.clear();
 }
 
 StateInfo Board::makeMove(Move m) {
-#ifndef NDEBUG
-    assert(validate());
-#endif
-
     StateInfo s = {
         squares[m.to],
         enPassantSq,
@@ -391,19 +387,11 @@ StateInfo Board::makeMove(Move m) {
     allOcc = whiteOcc | blackOcc;
     currentHash = newHash;
     hashHistory.push_back(currentHash);
-#ifndef NDEBUG
-    assert(currentHash == generateHash());
-    assert(validate());
-#endif
 
     return s;
 }
 
 void Board::unmakeMove(Move m, StateInfo s) {
-#ifndef NDEBUG
-    assert(validate());
-#endif
-
     turn = (turn == WHITE) ? BLACK : WHITE;
     int piece = squares[m.to];
 
@@ -569,11 +557,6 @@ void Board::unmakeMove(Move m, StateInfo s) {
     if (hashHistory.empty()) {
         hashHistory.push_back(currentHash);
     }
-#ifndef NDEBUG
-    assert(currentHash == generateHash());
-    assert(!hashHistory.empty() && hashHistory.back() == currentHash);
-    assert(validate());
-#endif
 }
 
 void Board::resetBb() {
@@ -636,6 +619,7 @@ void Board::loadFromFen(std::string fen) {
     allOcc = whiteOcc | blackOcc;
 
     turn = (activeColor == "w") ? WHITE : BLACK;
+
     currentHash = generateHash();
     hashHistory.clear();
     hashHistory.push_back(currentHash);

@@ -19,6 +19,7 @@ void init() {
     Board::initAll();
     moveGen::initAll();
     eval::initAll();
+    search::initAll();
 }
 
 int main() {
@@ -48,7 +49,7 @@ int main() {
                       << std::endl;
 
             if (!moves.empty()) {
-                int maxTimeMs = 2000;
+                int maxTimeMs = 5000;
                 Move bestMove = search::startSearch(board, maxTimeMs);
 
                 std::cout << "bestmove " << toAlgebraic(bestMove.from) << toAlgebraic(bestMove.to); 

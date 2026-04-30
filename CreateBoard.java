@@ -25,7 +25,8 @@ public class CreateBoard extends JPanel {
     private int lastMoveFrom = -1;
     private int lastMoveTo = -1;
     private int currentTurn = 1; // 1 white : -1 black
-    private boolean playerStarting = false;
+    private boolean playerStarting = true; // change to change colors
+    private boolean canMakeEngineMove = !playerStarting;
     private boolean canCastleWhiteKing = true;
     private boolean canCastleBlackKing = true;
     private boolean canCastleWhiteQueen = true;
@@ -58,15 +59,16 @@ public class CreateBoard extends JPanel {
         bridge.sendCommand("uci");
         bridge.sendCommand("isready");
         bridge.sendCommand("position fen " + getFen());
+        // bridge.sendCommand("perft 6");
 
         addMouseListener(new MouseAdapter() {
             @Override
             public void mousePressed(MouseEvent e) {
                 int col = e.getX() / TILESIZE;
                 int row = e.getY() / TILESIZE;
-                //System.out.println("col: " + col + "row: " + row);
 
                 int playerMove = (playerStarting) ? 1 : -1;
+                int engineMove = playerMove * -1;
                 if (currentTurn == playerMove) {
                     if (col >= 0 && col < 8 && row >= 0 && row < 8) {
                     int clickedIndex = row * 8 + col;
@@ -103,6 +105,10 @@ public class CreateBoard extends JPanel {
                                         canCastleWhiteKing = false;
                                         canCastleWhiteQueen = false;
                                     }
+                                    if (piece == 14 && castling == false) {
+                                        canCastleBlackKing = false;
+                                        canCastleBlackQueen = false;
+                                    }
 
                                     makeHumanMove(sourceTile, clickedIndex);
                                     if (flags >= PROMOTION_QUEEN && flags <= PROMOTION_KNIGHT) {
@@ -132,22 +138,24 @@ public class CreateBoard extends JPanel {
                             }
                         }
                     }
-                }
-                
-                //System.out.println("Selected: " + selectedTile);
-                repaint();
 
-                int engineMove = playerMove * -1;
-                if (currentTurn == engineMove) {
+                    canMakeEngineMove = true;
+                } 
+                if (currentTurn == engineMove && canMakeEngineMove) {
+                    canMakeEngineMove = false;
                     runEngineTurn();
                     totalTurns++;
-                }
+                }  
+
+                repaint();
             }
         });
     }
 
     public void makeHumanMove(int sourceTile, int clickedIndex) {
         int piece = board[sourceTile];
+        // System.out.println("moving piece " + getCharFromPiece(piece));
+
         int capturedPiece = board[clickedIndex];
         boolean isPromotionMove = (piece == 1 && clickedIndex < 8) || (piece == 9 && clickedIndex >= 56);
 
@@ -197,8 +205,6 @@ public class CreateBoard extends JPanel {
         } else {
             enPassantTarget = -1;
         }
-
-        // bridge.sendCommand("perft 6"); 
 
         currentTurn = (currentTurn == 1) ? -1 : 1;
         castling = false;
@@ -277,12 +283,7 @@ public class CreateBoard extends JPanel {
     }
 
     private void runEngineTurn() {
-        System.out.print("it is now ");
-        if (currentTurn == 1) System.out.println("whites turn");
-        else System.out.println("blacks turn");
-
-        String fen = getFen();        
-        bridge.sendCommand("position fen " + fen);
+        bridge.sendCommand("position fen " + getFen());
         bridge.sendCommand("go");
         new Thread(() -> {
             String bestMove = bridge.waitForBestMove();
@@ -294,7 +295,6 @@ public class CreateBoard extends JPanel {
 
             SwingUtilities.invokeLater(() -> makeEngineMove(bestMove));
         }).start();
-
     }
 
     private void loadImages() {
@@ -800,6 +800,7 @@ public class CreateBoard extends JPanel {
     public static void main(String[] args) {
         JFrame frame = new JFrame("chess display");
         CreateBoard boardPanel = new CreateBoard();
+        
         frame.add(boardPanel);
         frame.setSize(640, 660); 
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);

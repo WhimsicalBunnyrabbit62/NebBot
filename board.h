@@ -59,4 +59,7 @@ public:
     uint64_t generateHash() const;
 };
 
+extern uint64_t sideKey;
+extern uint64_t enPassantKeys[8];
+
 #endif
