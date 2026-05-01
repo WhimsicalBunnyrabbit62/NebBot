@@ -9,7 +9,7 @@
 
 std::string toAlgebraic(int sq) {
     char file = 'a' + (sq % 8);
-    char rank = '8' - (sq / 8);
+    char rank = '8' - (sq / 8); 
     return std::string(1, file) + std::string(1, rank);
 }
 
@@ -48,21 +48,40 @@ int main() {
                       << " | Evaluation (side-to-move): " << evalSideToMove
                       << std::endl;
 
-            if (!moves.empty()) {
-                int maxTimeMs = 5000;
-                Move bestMove = search::startSearch(board, maxTimeMs);
+            
+            int maxTimeMs = 1;
+            Move bestMove = search::startSearch(board, maxTimeMs);
 
+            if (bestMove.flags == CHECKMATE_ENGINE) {
+                std::cout << "bestmove checkmate" << std::endl;
+            } else if (bestMove.flags == STALEMATE) {
+                std::cout << "bestmove stalemate" << std::endl;
+            } else {
                 std::cout << "bestmove " << toAlgebraic(bestMove.from) << toAlgebraic(bestMove.to); 
                 std::cout << "\n-----------------------------------------------------------newl" << std::endl;
-            } else {
-                std::cout << "bestmove none" << std::endl;
             }
+
         } else if (line.rfind("perft", 0) == 0) {
             int depth = 1;
             if (line.size() > 6) depth = std::stoi(line.substr(6));
         
             std::cout << search::timedPerft(depth, board) << std::endl;
         } else if (line == "quit") break;
+        else if (line == "checkmated") {
+            MoveList moves;
+            moveGen::generateMoves(board, moves);
+            
+            if (moves.empty()) {
+                int kingSq = (board.turn == WHITE) ? moveGen::get_lsb(board.pieces[WK]) : moveGen::get_lsb(board.pieces[BK]);
+                if (kingSq != -1 && moveGen::isSquareAttacked(board, kingSq)) {
+                    std::cout << "result checkmate" << std::endl;
+                } else {
+                    std::cout << "result stalemate" << std::endl;
+                }
+            } else {
+                std::cout << "result none" << std::endl;
+            }
+        }
     }
 
     return 0;

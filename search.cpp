@@ -63,9 +63,9 @@ Move search::startSearch(Board& board, int maxTimeMs) {
         int kingSq = (board.turn == WHITE) ? moveGen::get_lsb(board.pieces[WK]) : moveGen::get_lsb(board.pieces[BK]);
         int enemy = (board.turn == WHITE) ? BLACK : WHITE;
         if (kingSq != -1 && moveGen::isSquareAttacked(board, kingSq)) {
-            return {-1, -1, NONE, 0};
+            return {-1, -1, CHECKMATE_ENGINE, 0};
         } else {
-            return {-1, -1, NONE, 0};
+            return {-1, -1, STALEMATE, 0};
         }
 
         std::cout << "no move" << std::endl;
@@ -119,6 +119,8 @@ Move search::startSearch(Board& board, int maxTimeMs) {
     std::cout << "Time taken (Engine Move) (ms): " << diff.count() << std::endl;
     std::cout << "Nodes looked at (Engine Move): " << nodesLookedAt << std::endl;
     std::cout << "TT got " << counter << " hits." << std::endl;
+
+    if (std::abs(bestMove.score) > 29000) bestMove.flags = CHECKMATE_PLAYER;
 
     return bestMove;
 }
@@ -207,8 +209,9 @@ int search::negamax(int depth, Board& board, int alpha, int beta, std::chrono::s
     int originalTurn = board.turn;
     int originalEPsq = board.enPassantSq;
     uint64_t originalHash = board.currentHash;
+    bool inCheck = moveGen::isSquareAttacked(board, kingSq);
 
-    if ((kingSq != -1 && !moveGen::isSquareAttacked(board, kingSq)) && depth >= 3 && otherPiecesPresent && allowNullMove) {
+    if ((kingSq != -1 && !inCheck && depth >= 3 && otherPiecesPresent && allowNullMove)) {
         board.turn *= -1;
         board.currentHash ^= sideKey;
         if (board.enPassantSq != -1) {
@@ -230,12 +233,23 @@ int search::negamax(int depth, Board& board, int alpha, int beta, std::chrono::s
     board.enPassantSq = originalEPsq;
     board.currentHash = originalHash;
 
+    int ind = 0;
     for (Move m : moves) {
         StateInfo s = board.makeMove(m);
         
         nodesLookedAt++;
 
-        int score = -negamax(depth - 1, board, -beta, -alpha, startTime, limit, true);
+        int score;
+        if (ind >= 3 && s.capturedPiece == EMPTY && !inCheck && (m.flags < 4 || m.flags > 7)) {
+            score = -negamax(depth - 3, board, -beta, -alpha, startTime, limit, true);
+
+            if (score > alpha) {
+                score = -negamax(depth - 1, board, -beta, -alpha, startTime, limit, true);
+            }
+        } else {
+            score = -negamax(depth - 1, board, -beta, -alpha, startTime, limit, true);
+        }
+
         board.unmakeMove(m, s);
 
         // best = std::max(best, score);
@@ -245,6 +259,7 @@ int search::negamax(int depth, Board& board, int alpha, int beta, std::chrono::s
         }
 
         alpha = std::max(alpha, score);
+        ind++;
 
         if (alpha >= beta) break;
     }

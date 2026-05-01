@@ -2,6 +2,9 @@ import java.io.*;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 
+import javax.swing.JOptionPane;
+import javax.swing.SwingUtilities;
+
 public class EngineBridge {
     private Process engineProcess; // cpp connection
     private PrintWriter writer; // write/output to cpp
@@ -53,6 +56,13 @@ public class EngineBridge {
                         if (parts.length > 1) {
                             bestMoves.offer(parts[1]);
                         }
+                    }
+
+                    final String resultLine = line;
+                    if (line.startsWith("result checkmate") || line.startsWith("result stalemate")) {
+                        SwingUtilities.invokeLater(() -> {
+                            JOptionPane.showMessageDialog(null, "Game Over: " + resultLine);
+                        });
                     }
                 }
             } catch (IOException e) {

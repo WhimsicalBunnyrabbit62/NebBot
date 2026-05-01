@@ -20,7 +20,10 @@ enum MoveFlag {
     PROMOTION_ROOK = 5,
     PROMOTION_BISHOP = 6,
     PROMOTION_KNIGHT = 7,
-    DOUBLE_PAWN_PUSH = 8
+    DOUBLE_PAWN_PUSH = 8,
+    CHECKMATE_ENGINE = 9,
+    CHECKMATE_PLAYER = 10,
+    STALEMATE = 11
 };
 
 struct Move {

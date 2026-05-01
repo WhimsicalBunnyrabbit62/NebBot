@@ -5,7 +5,8 @@ import java.awt.event.MouseEvent;
 import java.io.File;
 
 public class CreateBoard extends JPanel {
-    private int totalTurns = 1;
+    private int totalTurns = 0;
+    private int turnsSinceCapture = 0;
     private final int TILESIZE = 80;
     // Numerated Turns
     private static final int WHITE = 1;
@@ -100,6 +101,9 @@ public class CreateBoard extends JPanel {
                                     boolean oldCWQ = canCastleWhiteQueen;
                                     boolean oldCBQ = canCastleBlackQueen;
                                     int flags = computeMoveFlags(sourceTile, clickedIndex, board[sourceTile], capturedPiece);
+
+                                    if (capturedPiece == 0) turnsSinceCapture++;
+                                    else turnsSinceCapture = 0;
                                     
                                     if (piece == 6 && castling == false) {
                                         canCastleWhiteKing = false;
@@ -154,8 +158,6 @@ public class CreateBoard extends JPanel {
 
     public void makeHumanMove(int sourceTile, int clickedIndex) {
         int piece = board[sourceTile];
-        // System.out.println("moving piece " + getCharFromPiece(piece));
-
         int capturedPiece = board[clickedIndex];
         boolean isPromotionMove = (piece == 1 && clickedIndex < 8) || (piece == 9 && clickedIndex >= 56);
 
@@ -163,15 +165,24 @@ public class CreateBoard extends JPanel {
             int victimIndex = (currentTurn == 1) ? clickedIndex + 8 : clickedIndex - 8;
             board[victimIndex] = 0; 
         }
-        
-        if (piece == 4 && !castling && sourceTile == 63) {
+
+        if (piece == 6) { // white king
             canCastleWhiteKing = false;
-        }
-
-        if (piece == 4 && !castling && sourceTile == 56) {
             canCastleWhiteQueen = false;
+        } else if (piece == 14) { // black king
+            canCastleBlackKing = false;
+            canCastleBlackQueen = false;
+        } else if (piece == 4 && sourceTile == 63) { // white king side rook
+            canCastleWhiteKing = false;
+        } else if (piece == 4 && sourceTile == 56) { // white queen side rook
+            canCastleWhiteQueen = false;
+        } else if (piece == 12 && sourceTile == 7) { // black king side rook
+            canCastleBlackKing = false;
+        } else if (piece == 12 && sourceTile == 0) { // black queen side rook
+            canCastleBlackQueen = false;
         }
 
+        // no castle rook captured
         if (capturedPiece == 4) {
             if (clickedIndex == 63) canCastleWhiteKing = false;
             if (clickedIndex == 56) canCastleWhiteQueen = false;
@@ -180,24 +191,33 @@ public class CreateBoard extends JPanel {
             if (clickedIndex == 0) canCastleBlackQueen = false;
         }
 
+        // castling
         if (castling) {
-            if (clickedIndex == 58) {
+            if (clickedIndex == 58 || clickedIndex == 2) {
                 castleQueen(currentTurn == 1);
             } else {
-                castleKing(currentTurn == 1);
+                castleKing(currentTurn == 1);                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           
             }
-            canCastleWhiteKing = false;
-            canCastleWhiteQueen = false;
+
+            if (currentTurn == 1) {
+                canCastleWhiteKing = false;
+                canCastleWhiteQueen = false;
+            } else {
+                canCastleBlackKing = false;
+                canCastleBlackQueen = false;
+            }
         } else {
             board[clickedIndex] = board[sourceTile];
             board[sourceTile] = 0;
         }
 
+        // promotion
         if (isPromotionMove) {
             int promoteTo = choosePromotionPiece(currentTurn);
             board[clickedIndex] = promoteTo;
         }
 
+        // EP target
         if (piece == 1 && sourceTile - clickedIndex == 16) {
             enPassantTarget = sourceTile - 8;
         } else if (piece == 9 && clickedIndex - sourceTile == 16) {
@@ -287,9 +307,10 @@ public class CreateBoard extends JPanel {
         bridge.sendCommand("go");
         new Thread(() -> {
             String bestMove = bridge.waitForBestMove();
+            System.out.println("GOT: [" + bestMove + "]");
 
-            if (bestMove == null || bestMove.contains("none")) {
-                System.out.println("GAME OVER: Engine has no moves.");
+            if (bestMove == null || bestMove.contains("checkmate") || bestMove.contains("stalemate")) {
+                System.out.println(bestMove);
                 return;
             }
 
@@ -447,7 +468,10 @@ public class CreateBoard extends JPanel {
             int colDiff = Math.abs((start % 8) - (end % 8));
             int rowDiff = Math.abs((start / 8) - (end / 8));
 
-            if (piece == 6 && canCastleWhiteKing && start == 60) { // king
+            boolean kingCastle = (currentTurn == 1) ? canCastleWhiteKing : canCastleBlackKing;
+            boolean queenCastle = (currentTurn == 1) ? canCastleWhiteQueen : canCastleBlackQueen;
+
+            if (piece == 6 && kingCastle && start == 60) { // king
                 if (end == 62 && board[61] == 0 && board[62] == 0) { 
                     castling = true;
                     canCastleWhiteKing = false; 
@@ -456,11 +480,29 @@ public class CreateBoard extends JPanel {
                 }
             }
             
-            if (piece == 6 && canCastleWhiteQueen && start == 60) { // queen
+            if (piece == 6 && queenCastle && start == 60) { // queen
                 if (end == 58 && board[59] == 0 && board[58] == 0 && board[57] == 0) { 
                     castling = true;
                     canCastleWhiteQueen = false;
                     canCastleWhiteKing = false;
+                    return true;
+                }
+            }
+
+            if (piece == 14 && kingCastle && start == 4) { // king
+                if (end == 6 && board[5] == 0 && board[6] == 0) { 
+                    castling = true;
+                    canCastleBlackKing = false; 
+                    canCastleBlackQueen = false;
+                    return true;
+                }
+            }
+            
+            if (piece == 14 && queenCastle && start == 4) { // queen
+                if (end == 2 && board[1] == 0 && board[2] == 0 && board[3] == 0) { 
+                    castling = true;
+                    canCastleBlackQueen = false;
+                    canCastleBlackKing = false;
                     return true;
                 }
             }
@@ -700,7 +742,7 @@ public class CreateBoard extends JPanel {
         }
         
         // 50 move rule clock and full move clock (increment every black turn)
-        fen.append(" 0 " + totalTurns);
+        fen.append(" " + turnsSinceCapture + " " + totalTurns);
 
         return fen.toString();
     }
@@ -740,6 +782,7 @@ public class CreateBoard extends JPanel {
 
         int movingPiece = board[start];
         int capturedPiece = board[end];
+        if (capturedPiece != 0) turnsSinceCapture = 0;
 
         if (capturedPiece == 4) {
             if (end == 63) canCastleWhiteKing = false;
@@ -795,6 +838,9 @@ public class CreateBoard extends JPanel {
         lastMoveFrom = start;
         lastMoveTo = end;
 
+        bridge.sendCommand("position fen " + getFen());
+        bridge.sendCommand("checkmated");
+
         repaint();
     }
     public static void main(String[] args) {
@@ -808,4 +854,4 @@ public class CreateBoard extends JPanel {
         frame.setVisible(true);
 
     }
-}  
+}
