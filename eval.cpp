@@ -267,9 +267,14 @@ int eval::evaluate(Board& board) {
             egScore -= 25;
         }
         if (!(passedMaskWhite[sq] & allBlackPawns)) {
-            mgScore += passed_mg[7 - rank];
-            egScore += passed_eg[7 - rank];
-        }
+            if (1ULL << (sq + 8) & board.allOcc) {
+                mgScore += passed_mg[rank] * 0.5;
+                egScore += passed_eg[rank] * 0.5;
+            } else {
+                mgScore += passed_mg[rank];
+                egScore += passed_eg[rank];
+            }
+        } 
 
         moveGen::pop_bit(whitePawns);
     }
@@ -285,9 +290,15 @@ int eval::evaluate(Board& board) {
             mgScore += 20;
             egScore += 25;
         }
+
         if (!(passedMaskBlack[sq] & allWhitePawns)) {
-            mgScore -= passed_mg[rank];
-            egScore -= passed_eg[rank];
+            if (1ULL << (sq - 8) & board.allOcc) {
+                mgScore -= passed_mg[rank] * 0.5;
+                egScore -= passed_eg[rank] * 0.5;
+            } else {
+                mgScore -= passed_mg[rank];
+                egScore -= passed_eg[rank];
+            }
         }
 
         moveGen::pop_bit(blackPawns);
