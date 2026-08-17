@@ -21,10 +21,11 @@ class NN(nn.Module):
         super().__init__()
 
         self.sharedLayer = nn.Linear(FEATURE_COUNT, 256)
-        self.layerOne = nn.Linear(512, 128)
-        self.layerTwo = nn.Linear(128, 32)
-        self.layerThree = nn.Linear(32, 32)
-        self.layerFour = nn.Linear(32, 1)
+        self.layerOne = nn.Linear(512, 512)
+        self.layerTwo = nn.Linear(512, 256)
+        self.layerThree = nn.Linear(256, 128)
+        self.layerFour = nn.Linear(128, 64)
+        self.layerFive = nn.Linear(64, 1)
 
     def forward(self, white_input, black_input):
         white_features = self.sharedLayer(white_input)
@@ -39,6 +40,8 @@ class NN(nn.Module):
         x = self.layerThree(x)
         x = F.relu(x)
         x = self.layerFour(x)
+        x = F.relu(x)
+        x = self.layerFive(x)
         return torch.tanh(x)
 
 
@@ -184,16 +187,18 @@ def evaluate(model, dataloader, device):
 
 
 def train(model):
-    white_inputs = torch.from_numpy(np.load("white_in.npy"))
-    black_inputs = torch.from_numpy(np.load("black_in.npy"))
-    target_scores = torch.from_numpy(np.load("targets.npy")).float()
-    split = int(len(white_inputs) * 0.8)
+    split = 40_000_000
+    splitEnd = 10_000_000
+    total = split + splitEnd
+    white_inputs = torch.from_numpy(np.load("white_in.npy", mmap_mode="r")[:total].copy())
+    black_inputs = torch.from_numpy(np.load("black_in.npy", mmap_mode="r")[:total].copy())
+    target_scores = torch.from_numpy(np.load("targets.npy", mmap_mode="r")[:total].copy()).float()
     train_dataset = TensorDataset(white_inputs[:split], black_inputs[:split], target_scores[:split])
-    val_dataset = TensorDataset(white_inputs[split:], black_inputs[split:], target_scores[split:])
+    val_dataset = TensorDataset(white_inputs[split:split+splitEnd], black_inputs[split:split+splitEnd], target_scores[split:split+splitEnd])
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     pin_memory = device.type == "cuda"
-    train_dataloader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True, pin_memory=pin_memory)
-    val_dataloader = DataLoader(val_dataset, batch_size=BATCH_SIZE, pin_memory=pin_memory)
+    train_dataloader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True, pin_memory=pin_memory, num_workers=4)
+    val_dataloader = DataLoader(val_dataset, batch_size=BATCH_SIZE, pin_memory=pin_memory, num_workers=4)
     model.to(device)
     optimizer = optim.Adam(model.parameters(), lr=0.001)
     best_val_loss = math.inf

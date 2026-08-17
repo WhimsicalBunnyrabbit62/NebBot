@@ -2,3 +2,4 @@
 *.npy
 *.pth
 *.parquet
+*.bin
