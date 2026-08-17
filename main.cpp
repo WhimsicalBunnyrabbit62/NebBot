@@ -49,7 +49,7 @@ int main() {
                       << std::endl;
 
             
-            int maxTimeMs = 5000;
+            int maxTimeMs = 500;
             Move bestMove = search::startSearch(board, maxTimeMs);
 
             if (bestMove.flags == CHECKMATE_ENGINE) {
