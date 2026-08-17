@@ -24,7 +24,7 @@ static int pieceToBbIndex(int piece) {
     switch(piece) {
         case W_PAWN: return 0;
         case W_KNIGHT: return 1;
-        case W_BISHOP: return 2;
+        case W_BISHOP: return 2; 
         case W_ROOK: return 3;
         case W_QUEEN: return 4;
         case W_KING: return 5;

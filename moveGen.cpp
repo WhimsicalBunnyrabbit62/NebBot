@@ -276,6 +276,7 @@ void moveGen::initAll() {
     initKingMask();
 }
 
+// move legality check to search.cpp 
 void moveGen::generateMoves(Board& board, MoveList& legalMoves) {
     legalMoves.clear();
     MoveList moves;

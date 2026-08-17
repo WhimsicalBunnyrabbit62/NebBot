@@ -5,7 +5,7 @@ import java.awt.event.MouseEvent;
 import java.io.File;
 
 public class CreateBoard extends JPanel {
-    private int totalTurns = 0;
+    private int totalTurns = 1;
     private int turnsSinceCapture = 0;
     private final int TILESIZE = 80;
     // Numerated Turns
@@ -102,7 +102,7 @@ public class CreateBoard extends JPanel {
                                     boolean oldCBQ = canCastleBlackQueen;
                                     int flags = computeMoveFlags(sourceTile, clickedIndex, board[sourceTile], capturedPiece);
 
-                                    if (capturedPiece == 0) turnsSinceCapture++;
+                                    if (capturedPiece == 0 && piece != 9 && piece != 1) turnsSinceCapture++;
                                     else turnsSinceCapture = 0;
                                     
                                     if (piece == 6 && castling == false) {
@@ -782,7 +782,7 @@ public class CreateBoard extends JPanel {
 
         int movingPiece = board[start];
         int capturedPiece = board[end];
-        if (capturedPiece != 0) turnsSinceCapture = 0;
+        if (capturedPiece != 0 && movingPiece != 9 && movingPiece != 1) turnsSinceCapture = 0;
 
         if (capturedPiece == 4) {
             if (end == 63) canCastleWhiteKing = false;
