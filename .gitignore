@@ -3,7 +3,9 @@
 *.pth
 *.parquet
 *.bin
+*.class
 .vscode
+.DS_Store
 .venv
 board
 ChessEngine
