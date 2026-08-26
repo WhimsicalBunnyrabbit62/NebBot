@@ -7,7 +7,7 @@ import java.io.File;
 public class CreateBoard extends JPanel {
     private int totalTurns = 1;
     private int turnsSinceCapture = 0;
-    private final int TILESIZE = 80;
+    private int TILESIZE = 80;
     // Numerated Turns
     private static final int WHITE = 1;
     private static final int BLACK = -1;
@@ -337,6 +337,9 @@ public class CreateBoard extends JPanel {
     protected void paintComponent(Graphics g) {
         super.paintComponent(g);
         Graphics2D g2 = (Graphics2D) g;
+
+        TILESIZE = Math.min(getWidth(), getHeight())/8;
+        
         for (int i = 0; i < 64; i++) {
             int displayIndex = playerStarting ? i : 63 - i;
             int row = displayIndex / 8;

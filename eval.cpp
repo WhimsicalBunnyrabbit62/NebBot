@@ -6,6 +6,8 @@
 #include <vector>
 #include <algorithm>
 #include <limits>
+#include <fstream>
+#include <iostream>
 
 static const int mg_pawn_table[64] = {
       0,   0,   0,   0,   0,   0,  0,   0,
@@ -179,6 +181,19 @@ static const int passed_eg[8] = { 0, 20, 40, 80, 150, 300, 500, 0 };
 uint64_t passedMaskWhite[64];
 uint64_t passedMaskBlack[64];
 
+float eval::sharedlayerWeights[256][768] = {};
+float eval::sharedlayerBiases[256] = {};
+float eval::layerOneWeights[512][512] = {};
+float eval::layerOneBiases[512] = {};
+float eval::layerTwoWeights[256][512] = {};
+float eval::layerTwoBiases[256] = {};
+float eval::layerThreeWeights[128][256] = {};
+float eval::layerThreeBiases[128] = {};
+float eval::layerFourWeights[64][128] = {};
+float eval::layerFourBiases[64] = {};
+float eval::layerFiveWeights[64] = {};
+float eval::layerFiveBias[1] = {};
+
 void eval::initAll() {
     initPassedMasks();
 }
@@ -207,105 +222,253 @@ void eval::initPassedMasks() {
     }
 }
 
+void eval::initNNUE() {
+static auto loadBinary = [](const char* path, void* dst, size_t bytes) -> bool {
+        std::ifstream input(path, std::ios::binary);
+        if (!input) {
+            std::cerr << "Failed to open file: " << path << std::endl;
+            return false;
+        }
+
+        input.read(reinterpret_cast<char*>(dst), static_cast<std::streamsize>(bytes));
+        if (!input) {
+            std::cerr << "Error reading data from file: " << path << std::endl;
+            return false;
+        }
+
+        const std::streamsize readFloats = input.gcount() / static_cast<std::streamsize>(sizeof(float));
+        std::cout << "Successfully read " << readFloats << " floats from " << path << std::endl;
+        return true;
+    };
+
+    if (!loadBinary("raw_layers/sharedLayer_weight.bin", sharedlayerWeights, sizeof(sharedlayerWeights))) return;
+    if (!loadBinary("raw_layers/sharedLayer_bias.bin", sharedlayerBiases, sizeof(sharedlayerBiases))) return;
+    if (!loadBinary("raw_layers/layerOne_weight.bin", layerOneWeights, sizeof(layerOneWeights))) return;
+    if (!loadBinary("raw_layers/layerOne_bias.bin", layerOneBiases, sizeof(layerOneBiases))) return;
+    if (!loadBinary("raw_layers/layerTwo_weight.bin", layerTwoWeights, sizeof(layerTwoWeights))) return;
+    if (!loadBinary("raw_layers/layerTwo_bias.bin", layerTwoBiases, sizeof(layerTwoBiases))) return;
+    if (!loadBinary("raw_layers/layerThree_weight.bin", layerThreeWeights, sizeof(layerThreeWeights))) return;
+    if (!loadBinary("raw_layers/layerThree_bias.bin", layerThreeBiases, sizeof(layerThreeBiases))) return;
+    if (!loadBinary("raw_layers/layerFour_weight.bin", layerFourWeights, sizeof(layerFourWeights))) return;
+    if (!loadBinary("raw_layers/layerFour_bias.bin", layerFourBiases, sizeof(layerFourBiases))) return;
+    if (!loadBinary("raw_layers/layerFive_weight.bin", layerFiveWeights, sizeof(layerFiveWeights))) return;
+    if (!loadBinary("raw_layers/layerFive_bias.bin", layerFiveBias, sizeof(layerFiveBias))) return;
+}
+
+inline int pop_lsb(uint64_t& bb) {
+    int sq = __builtin_ctzll(bb); 
+    bb &= bb - 1;               
+    return sq;
+}
+
 int eval::evaluate(Board& board) {
-    int score = 0;
-    int mgPhase = 0;
-    int mgScore = 0;
-    int egScore = 0;
+    if (!useNNUE) {
+        int score = 0;
+        int mgPhase = 0;
+        int mgScore = 0;
+        int egScore = 0;
 
-    for (int i = 0; i < 6; i++) {
-        uint64_t wPieces = board.pieces[i]; 
-        int wCount = __builtin_popcountll(wPieces);
+        for (int i = 0; i < 6; i++) {
+            uint64_t wPieces = board.pieces[i]; 
+            int wCount = __builtin_popcountll(wPieces);
 
-        if (wPieces) {
-            score += (materialValues[i] * wCount);
-            mgPhase += (wCount * phaseValues[i]);
+            if (wPieces) {
+                score += (materialValues[i] * wCount);
+                mgPhase += (wCount * phaseValues[i]);
 
-            while (wPieces) {
-                int sq = moveGen::get_lsb(wPieces);
-                
-                mgScore += mg_pesto_table[i][sq];
-                egScore += eg_pesto_table[i][sq];
-                moveGen::pop_bit(wPieces);
+                while (wPieces) {
+                    int sq = moveGen::get_lsb(wPieces);
+                    
+                    mgScore += mg_pesto_table[i][sq];
+                    egScore += eg_pesto_table[i][sq];
+                    moveGen::pop_bit(wPieces);
+                }
+            }
+
+
+            uint64_t bPieces = board.pieces[i + 6]; 
+            int bCount = __builtin_popcountll(bPieces);
+
+            if (bPieces) {
+                score -= (materialValues[i] * bCount);
+                mgPhase += (bCount * phaseValues[i]);
+
+                while (bPieces) {
+                    int sq = moveGen::get_lsb(bPieces);
+
+                    mgScore -= mg_pesto_table[i][sq ^ 56];
+                    egScore -= eg_pesto_table[i][sq ^ 56];
+                    moveGen::pop_bit(bPieces);
+                }
+            }
+        }
+
+        // random stuff
+        if (__builtin_popcountll(board.pieces[WB]) >= 2) score += 30;
+        if (__builtin_popcountll(board.pieces[BB]) >= 2) score -= 30;
+
+        const uint64_t allWhitePawns = board.pieces[WP];
+        const uint64_t allBlackPawns = board.pieces[BP];
+
+        uint64_t whitePawns = allWhitePawns;
+        while (whitePawns) {
+            int sq = moveGen::get_lsb(whitePawns);
+
+            int file = sq % 8;
+            int rank = sq / 8;
+
+            if (!(neighborFilesMask[file] & allWhitePawns)) {
+                mgScore -= 20;
+                egScore -= 25;
+            }
+            if (!(passedMaskWhite[sq] & allBlackPawns)) {
+                if (1ULL << (sq + 8) & board.allOcc) {
+                    mgScore += passed_mg[rank] * 0.5;
+                    egScore += passed_eg[rank] * 0.5;
+                } else {
+                    mgScore += passed_mg[rank];
+                    egScore += passed_eg[rank];
+                }
+            } 
+
+            moveGen::pop_bit(whitePawns);
+        }
+        
+        uint64_t blackPawns = allBlackPawns;
+        while (blackPawns) {
+            int sq = moveGen::get_lsb(blackPawns);
+
+            int file = sq % 8;
+            int rank = sq / 8;
+
+            if (!(neighborFilesMask[file] & allBlackPawns)) {
+                mgScore += 20;
+                egScore += 25;
+            }
+
+            if (!(passedMaskBlack[sq] & allWhitePawns)) {
+                if (1ULL << (sq - 8) & board.allOcc) {
+                    mgScore -= passed_mg[rank] * 0.5;
+                    egScore -= passed_eg[rank] * 0.5;
+                } else {
+                    mgScore -= passed_mg[rank];
+                    egScore -= passed_eg[rank];
+                }
+            }
+
+            moveGen::pop_bit(blackPawns);
+        }
+
+        int phase = (mgPhase > 24) ? 24 : mgPhase;
+        score += ((mgScore * phase) + (egScore * (24 - phase))) / 24;
+
+        return score;
+    } else {
+        float whiteInput[768] = {};
+        float blackInput[768] = {};
+
+        for (int p = 0; p < 12; ++p) {
+            uint64_t bb = board.pieces[p];
+
+            while (bb) {
+                int sq = pop_lsb(bb);
+
+                int whiteidx = p*64+sq;
+                whiteInput[whiteidx] = 1.0f;
+
+                int black_piece = (p >= 6) ? (p - 6) : (p + 6);
+                int blacksq = sq^56;
+
+                int blackidx = (black_piece * 64 + blacksq);
+                blackInput[blackidx] = 1.0f;
             }
         }
 
 
-        uint64_t bPieces = board.pieces[i + 6]; 
-        int bCount = __builtin_popcountll(bPieces);
+        // std::cout << "WHITEIN";
+        // for (float f : whiteInput) std::cout << f << " ";
+        // std::cout << std::endl;
 
-        if (bPieces) {
-            score -= (materialValues[i] * bCount);
-            mgPhase += (bCount * phaseValues[i]);
+        // std::cout << "WEIGHTS";
+        // for (float f : sharedlayerBiases) std::cout << f << " ";
+        // std::cout << std::endl;
 
-            while (bPieces) {
-                int sq = moveGen::get_lsb(bPieces);
+        bool whiteFirst = board.turn == WHITE;
+        float output[512];
+        for (size_t i{0}; i < 256; ++i) {
+            float sum = sharedlayerBiases[i];
 
-                mgScore -= mg_pesto_table[i][sq ^ 56];
-                egScore -= eg_pesto_table[i][sq ^ 56];
-                moveGen::pop_bit(bPieces);
+            for (size_t j{0}; j < 768; ++j) {
+                sum += sharedlayerWeights[i][j] * ((whiteFirst) ? whiteInput[j] : blackInput[j]);
             }
+
+            output[i] = std::max(sum, 0.0f);
         }
+
+        for (size_t i{0}; i < 256; ++i) {
+            float sum = sharedlayerBiases[i];
+
+            for (size_t j{0}; j < 768; ++j) {
+                sum += sharedlayerWeights[i][j] * ((!whiteFirst) ? whiteInput[j] : blackInput[j]);
+            }
+
+            output[256+i] = std::max(sum, 0.0f);
+        }
+
+        float outputOne[512];
+        for (size_t i{0}; i < 512; ++i) {
+            float sum = layerOneBiases[i];
+
+            for (size_t j{0}; j < 512; ++j) {
+                sum += layerOneWeights[i][j] * output[j];
+            }
+
+            outputOne[i] = std::max(sum, 0.0f);
+        }
+
+        float outputTwo[256];
+        for (size_t i{0}; i < 256; ++i) {
+            float sum = layerTwoBiases[i];
+
+            for (size_t j{0}; j < 512; ++j) {
+                sum += layerTwoWeights[i][j] * outputOne[j];
+            }
+
+            outputTwo[i] = std::max(sum, 0.0f);
+        }
+
+        float outputThree[128];
+        for (size_t i{0}; i < 128; ++i) {
+            float sum = layerThreeBiases[i];
+
+            for (size_t j{0}; j < 256; ++j) {
+                sum += layerThreeWeights[i][j] * outputTwo[j];
+            }
+
+            outputThree[i] = std::max(sum, 0.0f);
+        }
+
+        float outputFour[64];
+        for (size_t i{0}; i < 64; ++i) {
+            float sum = layerFourBiases[i];
+
+            for (size_t j{0}; j < 128; ++j) {
+                sum += layerFourWeights[i][j] * outputThree[j];
+            }
+
+            outputFour[i] = std::max(sum, 0.0f);
+        }
+
+        float outputFive[1];
+        outputFive[0] = layerFiveBias[0];
+
+        for (size_t i{0}; i < 64; ++i) {
+            outputFive[0] += layerFiveWeights[i] * outputFour[i];
+        }
+
+        float answer = outputFive[0];
+        answer = std::tanh(answer);
+
+        return answer * 500;
     }
-
-    // random stuff
-    if (__builtin_popcountll(board.pieces[WB]) >= 2) score += 30;
-    if (__builtin_popcountll(board.pieces[BB]) >= 2) score -= 30;
-
-    const uint64_t allWhitePawns = board.pieces[WP];
-    const uint64_t allBlackPawns = board.pieces[BP];
-
-    uint64_t whitePawns = allWhitePawns;
-    while (whitePawns) {
-        int sq = moveGen::get_lsb(whitePawns);
-
-        int file = sq % 8;
-        int rank = sq / 8;
-
-        if (!(neighborFilesMask[file] & allWhitePawns)) {
-            mgScore -= 20;
-            egScore -= 25;
-        }
-        if (!(passedMaskWhite[sq] & allBlackPawns)) {
-            if (1ULL << (sq + 8) & board.allOcc) {
-                mgScore += passed_mg[rank] * 0.5;
-                egScore += passed_eg[rank] * 0.5;
-            } else {
-                mgScore += passed_mg[rank];
-                egScore += passed_eg[rank];
-            }
-        } 
-
-        moveGen::pop_bit(whitePawns);
-    }
-    
-    uint64_t blackPawns = allBlackPawns;
-    while (blackPawns) {
-        int sq = moveGen::get_lsb(blackPawns);
-
-        int file = sq % 8;
-        int rank = sq / 8;
-
-        if (!(neighborFilesMask[file] & allBlackPawns)) {
-            mgScore += 20;
-            egScore += 25;
-        }
-
-        if (!(passedMaskBlack[sq] & allWhitePawns)) {
-            if (1ULL << (sq - 8) & board.allOcc) {
-                mgScore -= passed_mg[rank] * 0.5;
-                egScore -= passed_eg[rank] * 0.5;
-            } else {
-                mgScore -= passed_mg[rank];
-                egScore -= passed_eg[rank];
-            }
-        }
-
-        moveGen::pop_bit(blackPawns);
-    }
-
-    int phase = (mgPhase > 24) ? 24 : mgPhase;
-    score += ((mgScore * phase) + (egScore * (24 - phase))) / 24;
-
-    return score;
 }

@@ -35,7 +35,7 @@ public:
     const int BK = 11;
 
     uint64_t pieces[12];
-    uint64_t whiteOcc; // pieces[WP] | pieces[WN] | pieces[WB] | pieces[WR] | pieces[WQ] | pieces[WK];
+    uint64_t whiteOcc; // = pieces[WP] | pieces[WN] | pieces[WB] | pieces[WR] | pieces[WQ] | pieces[WK];
     uint64_t blackOcc; // = pieces[BP] | pieces[BN] | pieces[BB] | pieces[BR] | pieces[BQ] | pieces[BK];
     uint64_t allOcc;
     uint64_t currentHash;

@@ -13,13 +13,12 @@ std::string toAlgebraic(int sq) {
     return std::string(1, file) + std::string(1, rank);
 }
 
-
-
 void init() {
     Board::initAll();
     moveGen::initAll();
     eval::initAll();
     search::initAll();
+    if (eval::useNNUE) eval::initNNUE();
 }
 
 int main() {
