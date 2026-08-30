@@ -1,6 +1,7 @@
 #include "Types.h"
 #include "search.h"
 #include "eval.h"
+#include "nnue.h"
 #include "moveGen.h"
 #include "board.h"
 #include <vector>
@@ -41,6 +42,7 @@ Move search::startSearch(Board& board, int maxTimeMs) {
     nodesLookedAt = 0;
     stopSearch = false;
     const int rootTurn = board.turn;
+    nnue::refreshAccumulator(board);
 
     MoveList allMoves;
     moveGen::generateMoves(board, allMoves);

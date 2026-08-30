@@ -1,5 +1,5 @@
 #include "board.h"
-#include <string>
+#include "nnue.h"
 #include <sstream>
 #include <cassert>
 #include <random>
@@ -166,6 +166,10 @@ StateInfo Board::makeMove(Move m) {
         b_queenside,
         currentHash
     };
+
+    nnue::accStack[nnue::accTop+1] = nnue::accStack[nnue::accTop];
+    ++nnue::accTop;
+
     if (m.flags == EN_PASSANT) {
         s.capturedPiece = (turn == WHITE) ? B_PAWN : W_PAWN;
     }
@@ -222,9 +226,15 @@ StateInfo Board::makeMove(Move m) {
         }
     }
     pieces[movingInd] &= ~fromMask;
-    pieces[movingInd] |= toMask;
+    nnue::accRemove(movingInd, m.from);
 
-    if (s.capturedPiece != EMPTY && m.flags != EN_PASSANT) pieces[pieceToBbIndex(s.capturedPiece)] &= ~toMask;
+    pieces[movingInd] |= toMask;
+    nnue::accAdd(movingInd, m.to);
+
+    if (s.capturedPiece != EMPTY && m.flags != EN_PASSANT) {
+        pieces[pieceToBbIndex(s.capturedPiece)] &= ~toMask;
+        nnue::accRemove(pieceToBbIndex(s.capturedPiece), m.to);
+    }
 
     squares[m.to] = piece;
     squares[m.from] = EMPTY;
@@ -272,11 +282,17 @@ StateInfo Board::makeMove(Move m) {
 
                 pieces[WP] &= ~toMask;
                 pieces[WQ] |= toMask;
+
+                nnue::accRemove(WP, m.to);
+                nnue::accAdd(WQ, m.to);
             } else {
                 squares[m.to] = B_QUEEN;
 
                 pieces[BP] &= ~toMask;
                 pieces[BQ] |= toMask;
+
+                nnue::accRemove(BP, m.to);
+                nnue::accAdd(BQ, m.to);
             }
         } else if (m.flags == PROMOTION_ROOK) {
             if (turn == WHITE) {
@@ -284,11 +300,17 @@ StateInfo Board::makeMove(Move m) {
 
                 pieces[WP] &= ~toMask;
                 pieces[WR] |= toMask;
+
+                nnue::accRemove(WP, m.to);
+                nnue::accAdd(WR, m.to);
             } else {
                 squares[m.to] = B_ROOK;
 
                 pieces[BP] &= ~toMask;
                 pieces[BR] |= toMask;
+
+                nnue::accRemove(BP, m.to);
+                nnue::accAdd(BR, m.to);
             }
         } else if (m.flags == PROMOTION_BISHOP) {
             if (turn == WHITE) {
@@ -296,11 +318,17 @@ StateInfo Board::makeMove(Move m) {
 
                 pieces[WP] &= ~toMask;
                 pieces[WB] |= toMask;
+
+                nnue::accRemove(WP, m.to);
+                nnue::accAdd(WB, m.to);
             } else {
                 squares[m.to] = B_BISHOP;
 
                 pieces[BP] &= ~toMask;
                 pieces[BB] |= toMask;
+
+                nnue::accRemove(BP, m.to);
+                nnue::accAdd(BB, m.to);
             }
         } else if (m.flags == PROMOTION_KNIGHT) {
             if (turn == WHITE) {
@@ -308,11 +336,17 @@ StateInfo Board::makeMove(Move m) {
 
                 pieces[WP] &= ~toMask;
                 pieces[WN] |= toMask;
+
+                nnue::accRemove(WP, m.to);
+                nnue::accAdd(WN, m.to);
             } else {
                 squares[m.to] = B_KNIGHT;
 
                 pieces[BP] &= ~toMask;
                 pieces[BN] |= toMask;
+
+                nnue::accRemove(BP, m.to);
+                nnue::accAdd(BN, m.to);
             }
         }
     } else if (m.flags == EN_PASSANT) {
@@ -322,7 +356,7 @@ StateInfo Board::makeMove(Move m) {
         int enemyPawnIdx = (turn == WHITE) ? BP : WP;
 
         pieces[enemyPawnIdx] &= ~victimMask;
-        
+        nnue::accRemove(enemyPawnIdx, victimSq);
     } 
     else if (m.flags == DOUBLE_PAWN_PUSH) {
         if (turn == WHITE) {
@@ -340,6 +374,9 @@ StateInfo Board::makeMove(Move m) {
 
             pieces[WR] &= ~rookFromMask;
             pieces[WR] |= rookToMask;
+
+            nnue::accRemove(WR, 63); 
+            nnue::accAdd(WR, 61);
         } else { 
             squares[5] = B_ROOK; 
             squares[7] = EMPTY; 
@@ -349,6 +386,9 @@ StateInfo Board::makeMove(Move m) {
 
             pieces[BR] &= ~rookFromMask;
             pieces[BR] |= rookToMask;
+
+            nnue::accRemove(BR, 7); 
+            nnue::accAdd(BR, 5);
         }
     }
     else if (m.flags == CASTLE_QUEEN) {
@@ -361,6 +401,9 @@ StateInfo Board::makeMove(Move m) {
 
             pieces[WR] &= ~rookFromMask;
             pieces[WR] |= rookToMask;
+
+            nnue::accRemove(WR, 56); 
+            nnue::accAdd(WR, 59);
         } else { 
             squares[3] = B_ROOK; 
             squares[0] = EMPTY; 
@@ -370,6 +413,9 @@ StateInfo Board::makeMove(Move m) {
 
             pieces[BR] &= ~rookFromMask;
             pieces[BR] |= rookToMask;
+
+            nnue::accRemove(BR, 0); 
+            nnue::accAdd(BR, 3);
         }
     }
 
@@ -394,6 +440,7 @@ StateInfo Board::makeMove(Move m) {
 void Board::unmakeMove(Move m, StateInfo s) {
     turn = (turn == WHITE) ? BLACK : WHITE;
     int piece = squares[m.to];
+    --nnue::accTop;
 
     if (m.flags == EN_PASSANT) {
         const int victimSq = (turn == WHITE) ? m.to + 8 : m.to - 8;
@@ -574,6 +621,7 @@ void Board::resetBb() {
 void Board::loadFromFen(std::string fen) {
     reset();
     resetBb();
+    
 
     std::stringstream ss(fen);
     std::string position, activeColor, castling, enPassant;

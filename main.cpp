@@ -5,6 +5,7 @@
 #include "board.h"
 #include "moveGen.h"
 #include "eval.h"
+#include "nnue.h"
 #include "search.h"
 
 std::string toAlgebraic(int sq) {
@@ -18,7 +19,7 @@ void init() {
     moveGen::initAll();
     eval::initAll();
     search::initAll();
-    if (eval::useNNUE) eval::initNNUE();
+    if (eval::useNNUE) { nnue::initNNUE(); nnue::buildFeatureTable(); }
 }
 
 int main() {
@@ -37,6 +38,7 @@ int main() {
         } else if (line.find("position fen ") == 0) {
             std::string fen = line.substr(13);
             board.loadFromFen(fen);
+            nnue::refreshAccumulator(board);
         } else if (line.find("go") == 0) {
             MoveList moves;
             moveGen::generateMoves(board, moves);
