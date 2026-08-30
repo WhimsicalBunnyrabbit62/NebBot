@@ -17,7 +17,7 @@ public:
     static int evaluate(Board& board);
     static void initNNUE();
 
-    const static bool useNNUE = false;
+    const static bool useNNUE = true;
 
     static float sharedlayerWeights[256][768];
     static float sharedlayerBiases[256];

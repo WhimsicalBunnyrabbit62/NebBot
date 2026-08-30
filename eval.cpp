@@ -373,14 +373,10 @@ int eval::evaluate(Board& board) {
             while (bb) {
                 int sq = pop_lsb(bb);
 
-                int whiteidx = p*64+sq;
-                whiteInput[whiteidx] = 1.0f;
-
                 int black_piece = (p >= 6) ? (p - 6) : (p + 6);
-                int blacksq = sq^56;
 
-                int blackidx = (black_piece * 64 + blacksq);
-                blackInput[blackidx] = 1.0f;
+                whiteInput[p * 64 + (sq ^ 56)] = 1.0f;
+                blackInput[black_piece * 64 + sq] = 1.0f;
             }
         }
 
@@ -468,7 +464,8 @@ int eval::evaluate(Board& board) {
 
         float answer = outputFive[0];
         answer = std::tanh(answer);
-
-        return answer * 500;
+        
+        // * 500 COULD BE A PROBLEM
+        return answer * 500 * board.turn;
     }
 }

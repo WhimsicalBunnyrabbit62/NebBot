@@ -65,8 +65,10 @@ public class CreateBoard extends JPanel {
         addMouseListener(new MouseAdapter() {
             @Override
             public void mousePressed(MouseEvent e) {
-                int col = e.getX() / TILESIZE;
-                int row = e.getY() / TILESIZE;
+                int boardOriginX = getBoardOriginX();
+                int boardOriginY = getBoardOriginY();
+                int col = (e.getX() - boardOriginX) / TILESIZE;
+                int row = (e.getY() - boardOriginY) / TILESIZE;
 
                 int playerMove = (playerStarting) ? 1 : -1;
                 int engineMove = playerMove * -1;
@@ -333,46 +335,58 @@ public class CreateBoard extends JPanel {
         }
     }
 
+    private int getBoardSize() {
+        return Math.min(getWidth(), getHeight()) - 20;
+    }
+
+    private int getBoardOriginX() {
+        return (getWidth() - getBoardSize()) / 2;
+    }
+
+    private int getBoardOriginY() {
+        return (getHeight() - getBoardSize()) / 2;
+    }
+
     @Override
     protected void paintComponent(Graphics g) {
         super.paintComponent(g);
         Graphics2D g2 = (Graphics2D) g;
+        setBackground(new Color(255, 134, 134));
 
-        TILESIZE = Math.min(getWidth(), getHeight())/8;
-        
+        TILESIZE = getBoardSize() / 8;
+        int boardOriginX = getBoardOriginX();
+        int boardOriginY = getBoardOriginY();
+
         for (int i = 0; i < 64; i++) {
             int displayIndex = playerStarting ? i : 63 - i;
             int row = displayIndex / 8;
             int col = displayIndex % 8;
+            int x = boardOriginX + col * TILESIZE;
+            int y = boardOriginY + row * TILESIZE;
 
-            g.setColor((row+col) % 2 == 0 ? new Color(235, 235, 208) : new Color(119, 148, 85));
-            g.fillRect(col * TILESIZE, row * TILESIZE, TILESIZE, TILESIZE);
+            g.setColor((row+col) % 2 == 0 ? new Color(212, 223, 230) : new Color(115, 150, 172));
+            g.fillRect(x, y, TILESIZE, TILESIZE);
 
             if (i == selectedTile) {
                 g.setColor(new Color(255, 255, 0, 128));
-                g.fillRect(col * TILESIZE, row * TILESIZE, TILESIZE, TILESIZE);
+                g.fillRect(x, y, TILESIZE, TILESIZE);
             }
 
             if (i == sourceTile) {
                 g.setColor(new Color(255, 255, 0, 150));
-                g.fillRect(col * TILESIZE, row * TILESIZE, TILESIZE, TILESIZE);
+                g.fillRect(x, y, TILESIZE, TILESIZE);
             }
 
             int pieceValue = board[i];
             if (pieceValue != 0 && pieceImages[pieceValue] != null) {
-                g.drawImage(pieceImages[pieceValue], col * TILESIZE, row * TILESIZE, TILESIZE, TILESIZE, null);
+                g.drawImage(pieceImages[pieceValue], x, y, TILESIZE, TILESIZE, null);
             }
 
             if (i == lastMoveFrom || i == lastMoveTo) {
                 g2.setColor(new Color(65, 253, 254));
                 g2.setStroke(new BasicStroke(4));
-                g2.drawRect(col * TILESIZE + 2, row * TILESIZE + 2, TILESIZE - 4, TILESIZE - 4);
+                g2.drawRect(x + 2, y + 2, TILESIZE - 4, TILESIZE - 4);
             }
-
-            // if (row == 0 && col == 0) {
-            //     g.setColor(new Color(0, 0, 0, 128));
-            //     g.fillRect(col * TILESIZE, row * TILESIZE, TILESIZE, TILESIZE);
-            // }
         }
     }
 
@@ -852,9 +866,9 @@ public class CreateBoard extends JPanel {
         
         frame.add(boardPanel);
         frame.setSize(640, 660); 
+        frame.setBackground(new Color(255, 134, 134));
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         frame.setLocationRelativeTo(null);
         frame.setVisible(true);
-
     }
 }
