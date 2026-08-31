@@ -46,6 +46,7 @@ public:
 
     static bool isSquareAttacked(Board& board, int sq);
     static void initAll();
+    static int SEE(Board& board, Move m);
 private:
     static std::string toAlgebraic(int index);
 

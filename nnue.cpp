@@ -11,16 +11,12 @@ float nnue::featureWeights[768][256] = {};
 
 float nnue::sharedlayerWeights[256][768] = {};
 float nnue::sharedlayerBiases[256] = {};
-float nnue::layerOneWeights[512][512] = {};
-float nnue::layerOneBiases[512] = {};
-float nnue::layerTwoWeights[256][512] = {};
-float nnue::layerTwoBiases[256] = {};
-float nnue::layerThreeWeights[128][256] = {};
-float nnue::layerThreeBiases[128] = {};
-float nnue::layerFourWeights[64][128] = {};
-float nnue::layerFourBiases[64] = {};
-float nnue::layerFiveWeights[64] = {};
-float nnue::layerFiveBias[1] = {};
+float nnue::layerOneWeights[32][512] = {};
+float nnue::layerOneBiases[32] = {};
+float nnue::layerTwoWeights[32][32] = {};
+float nnue::layerTwoBiases[32] = {};
+float nnue::layerThreeWeights[1][32] = {};
+float nnue::layerThreeBiases[1] = {};
 
 nnue::Accumulator nnue::accStack[256] = {};
 int nnue::accTop = 0;
@@ -54,10 +50,6 @@ static auto loadBinary = [](const char* path, void* dst, size_t bytes) -> bool {
     if (!loadBinary("raw_layers/layerTwo_bias.bin", layerTwoBiases, sizeof(layerTwoBiases))) return;
     if (!loadBinary("raw_layers/layerThree_weight.bin", layerThreeWeights, sizeof(layerThreeWeights))) return;
     if (!loadBinary("raw_layers/layerThree_bias.bin", layerThreeBiases, sizeof(layerThreeBiases))) return;
-    if (!loadBinary("raw_layers/layerFour_weight.bin", layerFourWeights, sizeof(layerFourWeights))) return;
-    if (!loadBinary("raw_layers/layerFour_bias.bin", layerFourBiases, sizeof(layerFourBiases))) return;
-    if (!loadBinary("raw_layers/layerFive_weight.bin", layerFiveWeights, sizeof(layerFiveWeights))) return;
-    if (!loadBinary("raw_layers/layerFive_bias.bin", layerFiveBias, sizeof(layerFiveBias))) return;
 }
 
 void nnue::buildFeatureTable() {
@@ -75,7 +67,7 @@ inline int pop_lsb(uint64_t& bb) {
 }
 
 void nnue::accAdd(int idx, int sq) {
-    int wf = idx * 64 + (sq ^ 56);
+    int wf = idx * 64 + (sq^56);
     int bp = (idx >= 6) ? idx - 6 : idx + 6;
     int bf = bp * 64 + sq;
 
@@ -86,7 +78,7 @@ void nnue::accAdd(int idx, int sq) {
 }
 
 void nnue::accRemove(int idx, int sq) {
-    int wf = idx * 64 + (sq ^ 56);
+    int wf = idx * 64 + (sq^56);
     int bp = (idx >= 6) ? idx - 6 : idx + 6;
     int bf = bp * 64 + sq;
 
@@ -143,8 +135,8 @@ int nnue::evaluate(Board& board) {
     for (size_t i{0}; i < 256; ++i) output[i] = std::max(stm[i], 0.0f);
     for (size_t i{0}; i < 256; ++i) output[i+256] = std::max(opp[i], 0.0f);
 
-    float outputOne[512];
-    for (size_t i{0}; i < 512; ++i) {
+    float outputOne[32];
+    for (size_t i{0}; i < 32; ++i) {
         float sum = layerOneBiases[i];
 
         for (size_t j{0}; j < 512; ++j) {
@@ -154,49 +146,31 @@ int nnue::evaluate(Board& board) {
         outputOne[i] = std::max(sum, 0.0f);
     }
 
-    float outputTwo[256];
-    for (size_t i{0}; i < 256; ++i) {
+    float outputTwo[32];
+    for (size_t i{0}; i < 32; ++i) {
         float sum = layerTwoBiases[i];
 
-        for (size_t j{0}; j < 512; ++j) {
+        for (size_t j{0}; j < 32; ++j) {
             sum += layerTwoWeights[i][j] * outputOne[j];
         }
 
         outputTwo[i] = std::max(sum, 0.0f);
     }
 
-    float outputThree[128];
-    for (size_t i{0}; i < 128; ++i) {
+    float outputThree[1];
+    for (size_t i{0}; i < 1; ++i) {
         float sum = layerThreeBiases[i];
 
-        for (size_t j{0}; j < 256; ++j) {
+        for (size_t j{0}; j < 32; ++j) {
             sum += layerThreeWeights[i][j] * outputTwo[j];
         }
 
-        outputThree[i] = std::max(sum, 0.0f);
+        outputThree[i] = sum;
     }
 
-    float outputFour[64];
-    for (size_t i{0}; i < 64; ++i) {
-        float sum = layerFourBiases[i];
-
-        for (size_t j{0}; j < 128; ++j) {
-            sum += layerFourWeights[i][j] * outputThree[j];
-        }
-
-        outputFour[i] = std::max(sum, 0.0f);
-    }
-
-    float outputFive[1];
-    outputFive[0] = layerFiveBias[0];
-
-    for (size_t i{0}; i < 64; ++i) {
-        outputFive[0] += layerFiveWeights[i] * outputFour[i];
-    }
-
-    float answer = outputFive[0];
+    float answer = outputThree[0];
     answer = std::tanh(answer);
 
     // * 500 COULD BE A PROBLEM
-    return answer * 500 * board.turn;
+    return answer * 200 * board.turn;
 }

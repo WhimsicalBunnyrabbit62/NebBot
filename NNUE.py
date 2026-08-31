@@ -21,11 +21,9 @@ class NN(nn.Module):
         super().__init__()
 
         self.sharedLayer = nn.Linear(FEATURE_COUNT, 256)
-        self.layerOne = nn.Linear(512, 512)
-        self.layerTwo = nn.Linear(512, 256)
-        self.layerThree = nn.Linear(256, 128)
-        self.layerFour = nn.Linear(128, 64)
-        self.layerFive = nn.Linear(64, 1)
+        self.layerOne = nn.Linear(512, 32)
+        self.layerTwo = nn.Linear(32, 32)
+        self.layerThree = nn.Linear(32, 1)
 
     def forward(self, white_input, black_input):
         white_features = self.sharedLayer(white_input)
@@ -38,10 +36,6 @@ class NN(nn.Module):
         x = self.layerTwo(x)
         x = F.relu(x)
         x = self.layerThree(x)
-        x = F.relu(x)
-        x = self.layerFour(x)
-        x = F.relu(x)
-        x = self.layerFive(x)
         return torch.tanh(x)
 
 

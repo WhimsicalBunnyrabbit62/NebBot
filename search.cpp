@@ -33,6 +33,8 @@ static const int MvvLvaScores[7][7] = {
 
 static int counter = 0;
 
+int getMvvLvaScore(Board& board, Move m);
+
 void search::initAll() {
     memset(TT, 0, sizeof(TT));
 }
@@ -161,6 +163,23 @@ int search::negamax(int depth, Board& board, int alpha, int beta, std::chrono::s
     MoveList moves;
     moveGen::generateMoves(board, moves);
 
+    if (depth > 0) {
+        int scores[256];
+        for (int i = 0; i < moves.size(); i++) scores[i] = getMvvLvaScore(board, moves.moves[i]);
+        for (int i = 1; i < moves.size(); i++) {
+            Move keyM = moves.moves[i];
+            int keyS = scores[i];
+            int j = i - 1;
+            while (j >= 0 && scores[j] < keyS) {
+                moves.moves[j + 1] = moves.moves[j];
+                scores[j + 1] = scores[j];
+                j--;
+            }
+            moves.moves[j + 1] = keyM;
+            scores[j + 1] = keyS;
+        }
+    }
+
     uint64_t hash = board.currentHash;
     int index = hash & 0x7FFFFF;
     TableEntry entry = TT[index];
@@ -222,7 +241,7 @@ int search::negamax(int depth, Board& board, int alpha, int beta, std::chrono::s
         }
 
         // zero window for more pruning
-        if (-negamax(depth - 3, board, -beta, -beta + 1, startTime, limit, false) >= beta) {
+        if (-negamax(depth - 2, board, -beta, -beta + 1, startTime, limit, false) >= beta) {
             board.turn = originalTurn;
             board.enPassantSq = originalEPsq;
             board.currentHash = originalHash;
@@ -235,34 +254,47 @@ int search::negamax(int depth, Board& board, int alpha, int beta, std::chrono::s
     board.enPassantSq = originalEPsq;
     board.currentHash = originalHash;
 
-    int ind = 0;
+    int moveCount = 0;
     for (Move m : moves) {
         StateInfo s = board.makeMove(m);
-        
         nodesLookedAt++;
+        moveCount++;
 
+        bool isCapture = (s.capturedPiece != EMPTY);
+        bool isPromotion = (m.flags >= PROMOTION_QUEEN && m.flags <= PROMOTION_KNIGHT);
+        bool isTactical = isCapture || isPromotion;
+        int newDepth = depth - 1;
         int score;
-        if (ind >= 3 && s.capturedPiece == EMPTY && !inCheck && (m.flags < 4 || m.flags > 7)) {
-            score = -negamax(depth - 3, board, -beta, -alpha, startTime, limit, true);
 
-            if (score > alpha) {
-                score = -negamax(depth - 1, board, -beta, -alpha, startTime, limit, true);
-            }
+
+        if (moveCount == 1) {
+            score = -negamax(newDepth, board, -beta, -alpha, startTime, limit, true);
         } else {
-            score = -negamax(depth - 1, board, -beta, -alpha, startTime, limit, true);
+            int R = 0;
+            if (depth >= 3 && moveCount > 3 && !isTactical && !inCheck) {
+                R = 1;
+                if (moveCount > 6) R = 2;    
+                if (R > newDepth - 1) R = newDepth - 1;
+                if (R < 0) R = 0;
+            }
+
+            score = -negamax(newDepth - R, board, -alpha - 1, -alpha, startTime, limit, true);
+
+            if (R > 0 && score > alpha) {
+                score = -negamax(newDepth, board, -alpha-1, -alpha, startTime, limit, true);
+            }
+
+            if (score > alpha && score < beta) {
+                score = -negamax(newDepth, board, -beta, -alpha, startTime, limit, true);
+            }
         }
+        
 
         board.unmakeMove(m, s);
+        if (stopSearch) return 0;
 
-        // best = std::max(best, score);
-        if (score > best) {
-            best = score;
-            bestMove = m;
-        }
-
-        alpha = std::max(alpha, score);
-        ind++;
-
+        if (score > best) { best = score; bestMove = m; }
+        if (score > alpha) alpha = score;
         if (alpha >= beta) break;
     }
 
@@ -312,6 +344,7 @@ int search::qSearch(Board& board, int alpha, int beta) {
         
         std::swap(captures.moves[i], captures.moves[bestIdx]);
         Move m = captures.moves[i];
+        if (moveGen::SEE(board, m) < 0) continue;
 
         StateInfo s = board.makeMove(m);
 

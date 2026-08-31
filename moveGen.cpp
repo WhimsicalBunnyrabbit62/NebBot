@@ -575,6 +575,87 @@ void moveGen::genPawnMoves(Board& board, MoveList& moves) {
     }
 }
 
+static inline uint64_t bishopAttacks(int sq, uint64_t occ) {
+    uint64_t blk = bishopMasks[sq] & occ;
+    int bits = __builtin_popcountll(bishopMasks[sq]);
+
+    return bishopTable[sq][(blk * BishopMagics[sq]) >> (64-bits)];
+}
+
+static inline uint64_t rookAttacks(int sq, uint64_t occ) {
+    uint64_t blk = rookMasks[sq] & occ;
+    int bits = __builtin_popcountll(rookMasks[sq]);
+
+    return rookTable[sq][(blk * RookMagics[sq]) >> (64-bits)];
+}
+
+static uint64_t attackersTo(Board& board, int to, uint64_t occ) {
+    uint64_t attackers = 0;
+
+    attackers |= pawnAttacks[1][to] & board.pieces[WP];
+    attackers |= pawnAttacks[0][to] & board.pieces[BP];
+    attackers |= knightMasks[to] & (board.pieces[WN] | board.pieces[BN]);
+    attackers |= kingMasks[to] & (board.pieces[WK] | board.pieces[BK]);
+    attackers |= bishopAttacks(to, occ) & (board.pieces[WB]|board.pieces[BB]|board.pieces[WQ]|board.pieces[BQ]);
+    attackers |= rookAttacks(to, occ) & (board.pieces[WR]|board.pieces[BR]|board.pieces[WQ]|board.pieces[BQ]);
+
+    return attackers;
+}
+
+inline int typeOf(int piece) {         
+    return (piece <= W_KING) ? piece - W_PAWN     
+                             : piece - B_PAWN;     
+}
+
+int moveGen::SEE(Board& board, Move m) {
+    static const int val[6] = {100, 320, 330, 500, 900, 20000};
+    int to = m.to;
+    uint64_t occ = board.allOcc;
+    
+    int gain[32];
+    int capType = (m.flags == EN_PASSANT) ? 0 : (typeOf(board.squares[to]));
+    gain[0] = val[capType];
+
+    int aType = typeOf(board.squares[m.from]);
+    occ ^= (1ULL << m.from);
+    if (m.flags == EN_PASSANT) {
+        occ ^= (1ULL << (to + (board.turn == WHITE ? -8 : 8)));
+    }
+
+    int side = -board.turn;
+    int d = 0;
+
+    while (true) {
+        uint64_t attackers = attackersTo(board, to, occ) & occ;
+        int base = (side == WHITE) ? WP : BP;
+
+        uint64_t lvaBit = 0;
+        int lva = -1;
+
+        for (int pt = 0; pt < 6; pt++) {
+            uint64_t s = attackers & board.pieces[base + pt];
+            if (s) { lvaBit = s & (~s + 1); lva = pt; break; }
+        }
+        if (lva < 0) break;
+
+        if (lva == 5) {
+            uint64_t oppOcc = (side == WHITE) ? board.blackOcc : board.whiteOcc;
+            if (attackersTo(board, to, occ ^ lvaBit) & oppOcc) break;
+        }
+
+        d++;
+        gain[d] = val[aType] - gain[d-1];
+        aType = lva;
+        occ ^= lvaBit;
+        side = -side;
+    }
+
+    while (--d > 0)
+        gain[d - 1] = -std::max(-gain[d - 1], gain[d]);
+
+    return gain[0];
+}
+
 bool moveGen::isSquareAttacked(Board& board, int sq) {
     uint64_t bit = (1ULL << sq);
     uint64_t enemyKnights = (board.turn == BLACK) ? board.pieces[WN] : board.pieces[BN];
