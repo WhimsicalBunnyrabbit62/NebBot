@@ -1,5 +1,6 @@
 import javax.swing.*;
 import java.awt.*;
+import java.awt.event.ActionEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.io.File;
@@ -157,6 +158,139 @@ public class CreateBoard extends JPanel {
                 repaint();
             }
         });
+
+        // L to load a fen
+        setFocusable(true);
+        getInputMap(WHEN_IN_FOCUSED_WINDOW).put(KeyStroke.getKeyStroke('l'), "loadFen");
+        getInputMap(WHEN_IN_FOCUSED_WINDOW).put(KeyStroke.getKeyStroke('L'), "loadFen");
+        getActionMap().put("loadFen", new AbstractAction() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                promptForFen();
+            }
+        });
+        System.out.println("Tip: press \"L\" to load a FEN and play from that position.");
+    }
+
+    // Ask the user for a FEN, load it, and let the engine reply if it is its turn.
+    private void promptForFen() {
+        String fen = JOptionPane.showInputDialog(this,
+                "Paste a FEN to load, then play from that position:",
+                "Load FEN", JOptionPane.PLAIN_MESSAGE);
+        if (fen == null) return; // cancelled
+
+        if (loadFromFen(fen)) {
+            int engineColor = playerStarting ? BLACK : WHITE;
+            if (currentTurn == engineColor) {
+                canMakeEngineMove = false;
+                runEngineTurn();
+            } else {
+                canMakeEngineMove = true;
+            }
+        }
+    }
+
+    // Parse a FEN into the board state. Returns false (and leaves the board
+    // untouched) if the string is malformed.
+    public boolean loadFromFen(String fen) {
+        if (fen == null) return false;
+        fen = fen.trim();
+        if (fen.isEmpty()) return false;
+
+        String[] parts = fen.split("\\s+");
+        String[] rows = parts[0].split("/");
+        if (rows.length != 8) {
+            showFenError("A FEN must have 8 ranks separated by '/'.");
+            return false;
+        }
+
+        // Parse placement into a temp array so a bad FEN never corrupts the board.
+        int[] temp = new int[64];
+        for (int r = 0; r < 8; r++) {
+            int col = 0;
+            for (char c : rows[r].toCharArray()) {
+                if (Character.isDigit(c)) {
+                    col += c - '0';
+                } else {
+                    int code = charToPieceCode(c);
+                    if (code == 0) {
+                        showFenError("Unexpected character '" + c + "' in the piece layout.");
+                        return false;
+                    }
+                    if (col > 7) {
+                        showFenError("Rank " + (8 - r) + " has too many squares.");
+                        return false;
+                    }
+                    temp[r * 8 + col] = code;
+                    col++;
+                }
+            }
+            if (col != 8) {
+                showFenError("Rank " + (8 - r) + " does not describe 8 squares.");
+                return false;
+            }
+        }
+
+        // Side to move (default white if omitted).
+        int newTurn = (parts.length >= 2 && parts[1].equalsIgnoreCase("b")) ? BLACK : WHITE;
+
+        // Castling rights.
+        boolean wk = false, wq = false, bk = false, bq = false;
+        if (parts.length >= 3 && !parts[2].equals("-")) {
+            wk = parts[2].contains("K");
+            wq = parts[2].contains("Q");
+            bk = parts[2].contains("k");
+            bq = parts[2].contains("q");
+        }
+
+        // En passant target square.
+        int ep = -1;
+        if (parts.length >= 4 && !parts[3].equals("-") && parts[3].length() == 2) {
+            ep = algebraicToIndex(parts[3]);
+        }
+
+        // Halfmove clock and fullmove number (cosmetic; default sanely).
+        int halfmove = 0, fullmove = 1;
+        if (parts.length >= 5) {
+            try { halfmove = Integer.parseInt(parts[4]); } catch (NumberFormatException ignored) {}
+        }
+        if (parts.length >= 6) {
+            try { fullmove = Integer.parseInt(parts[5]); } catch (NumberFormatException ignored) {}
+        }
+
+        // Everything parsed: commit the new state.
+        System.arraycopy(temp, 0, board, 0, 64);
+        currentTurn = newTurn;
+        canCastleWhiteKing = wk;
+        canCastleWhiteQueen = wq;
+        canCastleBlackKing = bk;
+        canCastleBlackQueen = bq;
+        enPassantTarget = ep;
+        turnsSinceCapture = halfmove;
+        totalTurns = fullmove;
+        sourceTile = -1;
+        castling = false;
+        lastMoveFrom = -1;
+        lastMoveTo = -1;
+
+        bridge.sendCommand("position fen " + getFen());
+        repaint();
+        return true;
+    }
+
+    private void showFenError(String detail) {
+        JOptionPane.showMessageDialog(this, "Invalid FEN: " + detail,
+                "Load FEN", JOptionPane.ERROR_MESSAGE);
+    }
+
+    private int charToPieceCode(char c) {
+        switch (c) {
+            case 'P': return 1;  case 'N': return 2;  case 'B': return 3;
+            case 'R': return 4;  case 'Q': return 5;  case 'K': return 6;
+            case 'p': return 9;  case 'n': return 10; case 'b': return 11;
+            case 'r': return 12; case 'q': return 13; case 'k': return 14;
+            default:  return 0;
+        }
     }
 
     public void makeHumanMove(int sourceTile, int clickedIndex) {
@@ -336,7 +470,7 @@ public class CreateBoard extends JPanel {
         }
     }
 
-    private static final int BAR_H = 48; // captured-pieces strip above and below the board
+    private static final int BAR_H = 48;
 
     private int getBoardSize() {
         return Math.min(getWidth(), getHeight() - 2 * BAR_H) - 20;
@@ -350,19 +484,17 @@ public class CreateBoard extends JPanel {
         return BAR_H + (getHeight() - 2 * BAR_H - getBoardSize()) / 2;
     }
 
-    // Standard piece point values (king/empty count as 0).
     private int piecePointValue(int piece) {
         switch (piece) {
-            case 1: case 9:  return 1; // pawn
-            case 2: case 10: return 3; // knight
-            case 3: case 11: return 3; // bishop
-            case 4: case 12: return 5; // rook
-            case 5: case 13: return 9; // queen
-            default:         return 0; // king / empty
+            case 1: case 9:  return 1; 
+            case 2: case 10: return 3; 
+            case 3: case 11: return 3; 
+            case 4: case 12: return 5; 
+            case 5: case 13: return 9; 
+            default:         return 0; 
         }
     }
 
-    // Sum of material on the board for one side (read-only).
     private int materialFor(boolean white) {
         int sum = 0;
         for (int piece : board) {
@@ -373,14 +505,13 @@ public class CreateBoard extends JPanel {
         return sum;
     }
 
-    // Full starting count for a given piece code.
     private int startingCount(int piece) {
         switch (piece) {
-            case 1: case 9:  return 8; // pawns
-            case 2: case 10: return 2; // knights
-            case 3: case 11: return 2; // bishops
-            case 4: case 12: return 2; // rooks
-            case 5: case 13: return 1; // queen
+            case 1: case 9:  return 8; 
+            case 2: case 10: return 2; 
+            case 3: case 11: return 2; 
+            case 4: case 12: return 2; 
+            case 5: case 13: return 1; 
             default:         return 0;
         }
     }
@@ -447,7 +578,6 @@ public class CreateBoard extends JPanel {
                 g2.fillRect(x, y, TILESIZE, TILESIZE);
             }
 
-            // coordinate labels: files along the bottom row, ranks along the left column
             Color labelColor = lightSquare ? DARK_SQUARE : LIGHT_SQUARE;
             g2.setFont(labelFont);
             g2.setColor(labelColor);
@@ -472,10 +602,10 @@ public class CreateBoard extends JPanel {
         boolean bottomIsWhite = playerStarting;
         int topBarCenterY = boardOriginY - BAR_H / 2;
         int bottomBarCenterY = boardOriginY + boardSize + BAR_H / 2;
-        // top player's bar
+
         drawPlayerBar(g2, boardOriginX, topBarCenterY,
                 !bottomIsWhite, !bottomIsWhite ? diff : -diff);
-        // bottom player's bar
+
         drawPlayerBar(g2, boardOriginX, bottomBarCenterY,
                 bottomIsWhite, bottomIsWhite ? diff : -diff);
     }
