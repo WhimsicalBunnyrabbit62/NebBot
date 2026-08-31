@@ -53,6 +53,7 @@ public class CreateBoard extends JPanel {
     private Image[] pieceImages = new Image[15];
 
     public CreateBoard() {
+        setBackground(new Color(38, 36, 33));
         loadImages();
 
         bridge.startListening(firstListener);
@@ -335,8 +336,10 @@ public class CreateBoard extends JPanel {
         }
     }
 
+    private static final int BAR_H = 48; // captured-pieces strip above and below the board
+
     private int getBoardSize() {
-        return Math.min(getWidth(), getHeight()) - 20;
+        return Math.min(getWidth(), getHeight() - 2 * BAR_H) - 20;
     }
 
     private int getBoardOriginX() {
@@ -344,18 +347,84 @@ public class CreateBoard extends JPanel {
     }
 
     private int getBoardOriginY() {
-        return (getHeight() - getBoardSize()) / 2;
+        return BAR_H + (getHeight() - 2 * BAR_H - getBoardSize()) / 2;
     }
+
+    // Standard piece point values (king/empty count as 0).
+    private int piecePointValue(int piece) {
+        switch (piece) {
+            case 1: case 9:  return 1; // pawn
+            case 2: case 10: return 3; // knight
+            case 3: case 11: return 3; // bishop
+            case 4: case 12: return 5; // rook
+            case 5: case 13: return 9; // queen
+            default:         return 0; // king / empty
+        }
+    }
+
+    // Sum of material on the board for one side (read-only).
+    private int materialFor(boolean white) {
+        int sum = 0;
+        for (int piece : board) {
+            boolean isWhite = piece >= 1 && piece <= 6;
+            boolean isBlack = piece >= 9 && piece <= 14;
+            if (white ? isWhite : isBlack) sum += piecePointValue(piece);
+        }
+        return sum;
+    }
+
+    // Full starting count for a given piece code.
+    private int startingCount(int piece) {
+        switch (piece) {
+            case 1: case 9:  return 8; // pawns
+            case 2: case 10: return 2; // knights
+            case 3: case 11: return 2; // bishops
+            case 4: case 12: return 2; // rooks
+            case 5: case 13: return 1; // queen
+            default:         return 0;
+        }
+    }
+
+    private int currentCount(int piece) {
+        int c = 0;
+        for (int p : board) if (p == piece) c++;
+        return c;
+    }
+
+    // How many of this piece type have left the board (captured), never negative.
+    private int capturedCount(int piece) {
+        return Math.max(0, startingCount(piece) - currentCount(piece));
+    }
+
+    // Board palette (classic warm wood)
+    private static final Color LIGHT_SQUARE   = new Color(240, 217, 181);
+    private static final Color DARK_SQUARE    = new Color(181, 136, 99);
+    private static final Color LAST_MOVE_TINT = new Color(246, 217, 99, 150);
+    private static final Color SELECT_TINT    = new Color(120, 190, 120, 160);
+    private static final Color BOARD_FRAME     = new Color(60, 47, 33);
 
     @Override
     protected void paintComponent(Graphics g) {
         super.paintComponent(g);
         Graphics2D g2 = (Graphics2D) g;
-        setBackground(new Color(255, 134, 134));
+        g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+        g2.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+        g2.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
+        g2.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
 
         TILESIZE = getBoardSize() / 8;
         int boardOriginX = getBoardOriginX();
         int boardOriginY = getBoardOriginY();
+        int boardSize = TILESIZE * 8;
+
+        // soft drop shadow + frame around the board
+        g2.setColor(new Color(0, 0, 0, 45));
+        g2.fillRoundRect(boardOriginX - 3, boardOriginY - 3 + 4, boardSize + 6, boardSize + 6, 14, 14);
+        g2.setColor(BOARD_FRAME);
+        g2.fillRoundRect(boardOriginX - 3, boardOriginY - 3, boardSize + 6, boardSize + 6, 14, 14);
+
+        int labelFontSize = Math.max(10, TILESIZE / 7);
+        Font labelFont = new Font("SansSerif", Font.BOLD, labelFontSize);
 
         for (int i = 0; i < 64; i++) {
             int displayIndex = playerStarting ? i : 63 - i;
@@ -363,30 +432,78 @@ public class CreateBoard extends JPanel {
             int col = displayIndex % 8;
             int x = boardOriginX + col * TILESIZE;
             int y = boardOriginY + row * TILESIZE;
+            boolean lightSquare = (row + col) % 2 == 0;
 
-            g.setColor((row+col) % 2 == 0 ? new Color(212, 223, 230) : new Color(115, 150, 172));
-            g.fillRect(x, y, TILESIZE, TILESIZE);
+            g2.setColor(lightSquare ? LIGHT_SQUARE : DARK_SQUARE);
+            g2.fillRect(x, y, TILESIZE, TILESIZE);
 
-            if (i == selectedTile) {
-                g.setColor(new Color(255, 255, 0, 128));
-                g.fillRect(x, y, TILESIZE, TILESIZE);
+            if (i == lastMoveFrom || i == lastMoveTo) {
+                g2.setColor(LAST_MOVE_TINT);
+                g2.fillRect(x, y, TILESIZE, TILESIZE);
             }
 
             if (i == sourceTile) {
-                g.setColor(new Color(255, 255, 0, 150));
-                g.fillRect(x, y, TILESIZE, TILESIZE);
+                g2.setColor(SELECT_TINT);
+                g2.fillRect(x, y, TILESIZE, TILESIZE);
+            }
+
+            // coordinate labels: files along the bottom row, ranks along the left column
+            Color labelColor = lightSquare ? DARK_SQUARE : LIGHT_SQUARE;
+            g2.setFont(labelFont);
+            g2.setColor(labelColor);
+            if (row == 7) {
+                String fileLabel = String.valueOf((char) ('a' + (i % 8)));
+                FontMetrics fm = g2.getFontMetrics();
+                g2.drawString(fileLabel, x + TILESIZE - fm.stringWidth(fileLabel) - 4, y + TILESIZE - 5);
+            }
+            if (col == 0) {
+                String rankLabel = String.valueOf(8 - (i / 8));
+                g2.drawString(rankLabel, x + 4, y + g2.getFontMetrics().getAscent() + 2);
             }
 
             int pieceValue = board[i];
             if (pieceValue != 0 && pieceImages[pieceValue] != null) {
-                g.drawImage(pieceImages[pieceValue], x, y, TILESIZE, TILESIZE, null);
+                int pad = Math.max(2, TILESIZE / 22);
+                g2.drawImage(pieceImages[pieceValue], x + pad, y + pad, TILESIZE - 2 * pad, TILESIZE - 2 * pad, null);
             }
+        }
 
-            if (i == lastMoveFrom || i == lastMoveTo) {
-                g2.setColor(new Color(65, 253, 254));
-                g2.setStroke(new BasicStroke(4));
-                g2.drawRect(x + 2, y + 2, TILESIZE - 4, TILESIZE - 4);
+        int diff = materialFor(true) - materialFor(false);
+        boolean bottomIsWhite = playerStarting;
+        int topBarCenterY = boardOriginY - BAR_H / 2;
+        int bottomBarCenterY = boardOriginY + boardSize + BAR_H / 2;
+        // top player's bar
+        drawPlayerBar(g2, boardOriginX, topBarCenterY,
+                !bottomIsWhite, !bottomIsWhite ? diff : -diff);
+        // bottom player's bar
+        drawPlayerBar(g2, boardOriginX, bottomBarCenterY,
+                bottomIsWhite, bottomIsWhite ? diff : -diff);
+    }
+
+    private void drawPlayerBar(Graphics2D g2, int boardOriginX, int barCenterY,
+                               boolean barIsWhite, int advantage) {
+        int icon = 26;
+        int x = boardOriginX + 4;
+        int y = barCenterY - icon / 2;
+
+        int[] order = barIsWhite ? new int[]{9, 10, 11, 12, 13}   
+                                  : new int[]{1, 2, 3, 4, 5};    
+        for (int type : order) {
+            int cnt = capturedCount(type);
+            for (int k = 0; k < cnt; k++) {
+                if (pieceImages[type] != null) {
+                    g2.drawImage(pieceImages[type], x, y, icon, icon, null);
+                }
+                x += (int) (icon * 0.5); 
             }
+            if (cnt > 0) x += (int) (icon * 0.3); 
+        }
+
+        if (advantage > 0) {
+            g2.setFont(new Font("SansSerif", Font.BOLD, 16));
+            FontMetrics fm = g2.getFontMetrics();
+            g2.setColor(new Color(255, 255, 255));
+            g2.drawString("+" + advantage, x + 6, barCenterY + fm.getAscent() / 2 - 1);
         }
     }
 
@@ -861,12 +978,13 @@ public class CreateBoard extends JPanel {
         repaint();
     }
     public static void main(String[] args) {
-        JFrame frame = new JFrame("chess display");
+        JFrame frame = new JFrame("Chess");
         CreateBoard boardPanel = new CreateBoard();
-        
+
         frame.add(boardPanel);
-        frame.setSize(640, 660); 
-        frame.setBackground(new Color(255, 134, 134));
+        frame.setSize(720, 740);
+        frame.setMinimumSize(new Dimension(420, 440));
+        frame.getContentPane().setBackground(new Color(38, 36, 33));
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         frame.setLocationRelativeTo(null);
         frame.setVisible(true);
