@@ -164,7 +164,7 @@ public class CreateBoard extends JPanel {
         getInputMap(WHEN_IN_FOCUSED_WINDOW).put(KeyStroke.getKeyStroke('l'), "loadFen");
         getInputMap(WHEN_IN_FOCUSED_WINDOW).put(KeyStroke.getKeyStroke('L'), "loadFen");
         getActionMap().put("loadFen", new AbstractAction() {
-            @Override
+            @Override   
             public void actionPerformed(ActionEvent e) {
                 promptForFen();
             }

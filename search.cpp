@@ -13,12 +13,15 @@
 
 static constexpr int NEG_INF = -30000;
 static constexpr int POS_INF = 30000;
+static constexpr int MAX_PLY = 128;
 
 static int nodesLookedAt = 0;
 bool stopSearch = false;
 Move curBestMove;
 
 static TableEntry TT[8388608];
+static Move killers[MAX_PLY][2];
+static int history[2][64][64];
 
 static const int MvvLvaScores[7][7] = {
 // Attackers: [placeholder, P, N, B, R, Q, K]
@@ -34,6 +37,7 @@ static const int MvvLvaScores[7][7] = {
 static int counter = 0;
 
 int getMvvLvaScore(Board& board, Move m);
+int scoreMove(Board& board, Move m, Move ttMove, int ply);
 
 void search::initAll() {
     memset(TT, 0, sizeof(TT));
@@ -45,6 +49,8 @@ Move search::startSearch(Board& board, int maxTimeMs) {
     stopSearch = false;
     const int rootTurn = board.turn;
     nnue::refreshAccumulator(board);
+    memset(history, 0, sizeof(history));
+    memset(killers, 0, sizeof(killers));
 
     MoveList allMoves;
     moveGen::generateMoves(board, allMoves);
@@ -82,13 +88,25 @@ Move search::startSearch(Board& board, int maxTimeMs) {
         int curBestEval = NEG_INF;
         Move curBestMove;
 
+        int alpha = NEG_INF, beta = POS_INF;
+        int moveCount = 0;
         int bestInd = 0;
         for (int i = 0; i < allMoves.size(); i++) {
             Move m = allMoves.moves[i];
             StateInfo s = board.makeMove(m);
-
             nodesLookedAt++;
-            int score = -negamax(curDepth - 1, board, NEG_INF, POS_INF, start, maxTimeMs, true);
+            int score;
+            moveCount++;
+
+            if (moveCount == 1) {
+                score = -negamax(curDepth - 1, 0, board, -beta, -alpha, start, maxTimeMs, true);
+            } else {
+                score = -negamax(curDepth-1, 0, board, -alpha-1, -alpha, start, maxTimeMs, true);
+
+                if (score > alpha && score < beta) {
+                    score = -negamax(curDepth - 1, 0, board, -beta, -alpha, start, maxTimeMs, true);
+                }
+            }
             
             board.unmakeMove(m, s);
 
@@ -99,6 +117,8 @@ Move search::startSearch(Board& board, int maxTimeMs) {
                 bestInd = i;
                 curBestMove = m;
             }
+
+            if (score > alpha) alpha = score;
         }
 
         if (!stopSearch) {
@@ -144,7 +164,13 @@ bool nonKPPresent(Board& board) {
     return false;
 }
 
-int search::negamax(int depth, Board& board, int alpha, int beta, std::chrono::steady_clock::time_point startTime, int limit, bool allowNullMove) {
+void storeKiller(Move m, int ply) {
+    if (m == killers[ply][0]) return; 
+    killers[ply][1] = killers[ply][0]; 
+    killers[ply][0] = m;               
+}
+
+int search::negamax(int depth, int ply, Board& board, int alpha, int beta, std::chrono::steady_clock::time_point startTime, int limit, bool allowNullMove) {
     // duration cast -> convert nanoseconds to manageable numbers in this case ms
     // chrono steady clock now -> get current time 
     // - start -> difference from the time at the beginning
@@ -163,26 +189,10 @@ int search::negamax(int depth, Board& board, int alpha, int beta, std::chrono::s
     MoveList moves;
     moveGen::generateMoves(board, moves);
 
-    if (depth > 0) {
-        int scores[256];
-        for (int i = 0; i < moves.size(); i++) scores[i] = getMvvLvaScore(board, moves.moves[i]);
-        for (int i = 1; i < moves.size(); i++) {
-            Move keyM = moves.moves[i];
-            int keyS = scores[i];
-            int j = i - 1;
-            while (j >= 0 && scores[j] < keyS) {
-                moves.moves[j + 1] = moves.moves[j];
-                scores[j + 1] = scores[j];
-                j--;
-            }
-            moves.moves[j + 1] = keyM;
-            scores[j + 1] = keyS;
-        }
-    }
-
     uint64_t hash = board.currentHash;
     int index = hash & 0x7FFFFF;
     TableEntry entry = TT[index];
+    Move ttMove = {-1, -1, 0, 0};
 
     if (entry.hash != 0 && entry.hash == hash) {
         counter++;
@@ -199,17 +209,26 @@ int search::negamax(int depth, Board& board, int alpha, int beta, std::chrono::s
                 return entry.eval;
             }
         }
-
-        for (int i = 0; i < moves.size(); i++) {
-            if (moves.moves[i] == entry.best) {
-                std::swap(moves.moves[0], moves.moves[i]);
-                break;
-            }
-        }
+        ttMove = entry.best;
     }
 
-    if (depth <= 0) {
-        return qSearch(board, alpha, beta);
+    if (depth <= 0) return qSearch(board, alpha, beta);
+
+    if (depth > 0) {
+        int scores[256];
+        for (int i = 0; i < moves.size(); i++) scores[i] = scoreMove(board, moves.moves[i], ttMove, ply);
+        for (int i = 1; i < moves.size(); i++) {
+            Move keyM = moves.moves[i];
+            int keyS = scores[i];
+            int j = i - 1;
+            while (j >= 0 && scores[j] < keyS) {
+                moves.moves[j + 1] = moves.moves[j];
+                scores[j + 1] = scores[j];
+                j--;
+            }
+            moves.moves[j + 1] = keyM;
+            scores[j + 1] = keyS;
+        }
     }
 
     if (moves.empty()) {
@@ -241,7 +260,7 @@ int search::negamax(int depth, Board& board, int alpha, int beta, std::chrono::s
         }
 
         // zero window for more pruning
-        if (-negamax(depth - 2, board, -beta, -beta + 1, startTime, limit, false) >= beta) {
+        if (-negamax(depth - 2, ply+1, board, -beta, -beta + 1, startTime, limit, false) >= beta) {
             board.turn = originalTurn;
             board.enPassantSq = originalEPsq;
             board.currentHash = originalHash;
@@ -268,7 +287,7 @@ int search::negamax(int depth, Board& board, int alpha, int beta, std::chrono::s
 
 
         if (moveCount == 1) {
-            score = -negamax(newDepth, board, -beta, -alpha, startTime, limit, true);
+            score = -negamax(newDepth, ply+1, board, -beta, -alpha, startTime, limit, true);
         } else {
             int R = 0;
             if (depth >= 3 && moveCount > 3 && !isTactical && !inCheck) {
@@ -278,14 +297,14 @@ int search::negamax(int depth, Board& board, int alpha, int beta, std::chrono::s
                 if (R < 0) R = 0;
             }
 
-            score = -negamax(newDepth - R, board, -alpha - 1, -alpha, startTime, limit, true);
+            score = -negamax(newDepth - R, ply+1, board, -alpha - 1, -alpha, startTime, limit, true);
 
             if (R > 0 && score > alpha) {
-                score = -negamax(newDepth, board, -alpha-1, -alpha, startTime, limit, true);
+                score = -negamax(newDepth, ply+1, board, -alpha-1, -alpha, startTime, limit, true);
             }
 
             if (score > alpha && score < beta) {
-                score = -negamax(newDepth, board, -beta, -alpha, startTime, limit, true);
+                score = -negamax(newDepth, ply+1, board, -beta, -alpha, startTime, limit, true);
             }
         }
         
@@ -295,7 +314,15 @@ int search::negamax(int depth, Board& board, int alpha, int beta, std::chrono::s
 
         if (score > best) { best = score; bestMove = m; }
         if (score > alpha) alpha = score;
-        if (alpha >= beta) break;
+        if (alpha >= beta) {
+            if (!isTactical) {
+                int& h = history[(board.turn == WHITE) ? 0 : 1][m.from][m.to];
+                h += depth * depth;
+                if (h > 70000) h = 70000;
+                storeKiller(m, ply);
+            }
+            break;
+        }
     }
 
     BoundType bound;
@@ -317,6 +344,15 @@ int getMvvLvaScore(Board& board, Move m) {
     int attacker = pieceTypeIndex(board.squares[m.from]);
 
     return MvvLvaScores[victim][attacker];
+}
+
+int scoreMove(Board& board, Move m, Move ttMove, int ply) {
+    if (m == ttMove) return 20000000;
+    int mvv = getMvvLvaScore(board, m);
+    if (mvv > 0) return 100000 + mvv;
+    if (m == killers[ply][0]) return 90000;
+    if (m == killers[ply][1]) return 80000;
+    return history[board.turn==WHITE?0:1][m.from][m.to];
 }
 
 int search::qSearch(Board& board, int alpha, int beta) {
