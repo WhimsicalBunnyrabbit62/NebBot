@@ -183,7 +183,9 @@ int search::negamax(int depth, int ply, Board& board, int alpha, int beta, std::
 
     if (stopSearch) return 0;
 
-    if (board.isThreefold()) return 0;
+    // Draw on the first repetition inside the search: a position that recurs
+    // within the search is effectively a draw with best play.
+    if (board.isRepetition()) return 0;
 
     int best = NEG_INF - depth;
     MoveList moves;
@@ -240,8 +242,12 @@ int search::negamax(int depth, int ply, Board& board, int alpha, int beta, std::
             return 0;
         }
     }
-    
-    int originalAlpha = alpha; 
+
+    // Fifty-move rule. Checked after confirming legal moves exist, so that a
+    // checkmate delivered on the 100th ply is still scored as mate, not a draw.
+    if (board.isFiftyMoveDraw()) return 0;
+
+    int originalAlpha = alpha;
     Move bestMove = moves.moves[0];
 
     int kingSq = (board.turn == WHITE) ? moveGen::get_lsb(board.pieces[WK]) : moveGen::get_lsb(board.pieces[BK]);
@@ -356,7 +362,7 @@ int scoreMove(Board& board, Move m, Move ttMove, int ply) {
 }
 
 int search::qSearch(Board& board, int alpha, int beta) {
-    if (board.isThreefold()) return 0;
+    if (board.isRepetition() || board.isFiftyMoveDraw()) return 0;
 
     int standPat = eval::evaluate(board) * board.turn; // Eval if player does nothing
 

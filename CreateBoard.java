@@ -190,8 +190,6 @@ public class CreateBoard extends JPanel {
         }
     }
 
-    // Parse a FEN into the board state. Returns false (and leaves the board
-    // untouched) if the string is malformed.
     public boolean loadFromFen(String fen) {
         if (fen == null) return false;
         fen = fen.trim();
@@ -204,7 +202,6 @@ public class CreateBoard extends JPanel {
             return false;
         }
 
-        // Parse placement into a temp array so a bad FEN never corrupts the board.
         int[] temp = new int[64];
         for (int r = 0; r < 8; r++) {
             int col = 0;
@@ -231,10 +228,10 @@ public class CreateBoard extends JPanel {
             }
         }
 
-        // Side to move (default white if omitted).
+        // Side to move 
         int newTurn = (parts.length >= 2 && parts[1].equalsIgnoreCase("b")) ? BLACK : WHITE;
 
-        // Castling rights.
+        // Castling rights
         boolean wk = false, wq = false, bk = false, bq = false;
         if (parts.length >= 3 && !parts[2].equals("-")) {
             wk = parts[2].contains("K");
@@ -249,7 +246,6 @@ public class CreateBoard extends JPanel {
             ep = algebraicToIndex(parts[3]);
         }
 
-        // Halfmove clock and fullmove number (cosmetic; default sanely).
         int halfmove = 0, fullmove = 1;
         if (parts.length >= 5) {
             try { halfmove = Integer.parseInt(parts[4]); } catch (NumberFormatException ignored) {}
@@ -258,7 +254,6 @@ public class CreateBoard extends JPanel {
             try { fullmove = Integer.parseInt(parts[5]); } catch (NumberFormatException ignored) {}
         }
 
-        // Everything parsed: commit the new state.
         System.arraycopy(temp, 0, board, 0, 64);
         currentTurn = newTurn;
         canCastleWhiteKing = wk;

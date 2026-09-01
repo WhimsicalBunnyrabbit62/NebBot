@@ -13,6 +13,7 @@ struct StateInfo {
    bool b_kingside;
    bool b_queenside;
    uint64_t previousHash;
+   int halfmoveClock;
 };
 
 class Board{
@@ -40,6 +41,7 @@ public:
     uint64_t allOcc;
     uint64_t currentHash;
     std::vector<uint64_t> hashHistory;
+    int halfmoveClock = 0; // plies since the last capture or pawn move for fifty move rule
 
     bool w_kingside, w_queenside;
     bool b_kingside, b_queenside;
@@ -53,7 +55,9 @@ public:
     void loadFromFen(std::string fen);
     int charToPiece(char c);
     bool validate() const;
-    bool isThreefold() const;
+    bool isRepetition() const;    // true on the first repetition (2nd occurrence) within the halfmove window
+    bool isThreefold() const;     // true on a strict threefold (3rd occurrence)
+    bool isFiftyMoveDraw() const; // true once 100 plies have passed with no capture or pawn move
 
     static void initAll();
     uint64_t generateHash() const;

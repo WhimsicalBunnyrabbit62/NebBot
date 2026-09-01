@@ -4,6 +4,7 @@
 #include <cassert>
 #include <random>
 #include <iostream>
+#include <algorithm>
 
 uint64_t pieceKeys[12][64];
 uint64_t sideKey;
@@ -126,20 +127,41 @@ bool Board::validate() const {
     return true;
 }
 
+bool Board::isRepetition() const {
+    if (hashHistory.empty()) return false;
+
+    const uint64_t key = hashHistory.back();
+    const int last = static_cast<int>(hashHistory.size()) - 1;
+
+    const int limit = std::min(halfmoveClock, last);
+
+    for (int i = 2; i <= limit; i += 2) {
+        if (hashHistory[last - i] == key) return true;
+    }
+
+    return false;
+}
+
 bool Board::isThreefold() const {
     if (hashHistory.empty()) return false;
 
     const uint64_t key = hashHistory.back();
-    int matches = 0;
+    const int last = static_cast<int>(hashHistory.size()) - 1;
+    const int limit = std::min(halfmoveClock, last);
 
-    for (int i = static_cast<int>(hashHistory.size()) - 1; i >= 0; i -= 2) {
-        if (hashHistory[i] == key) {
+    int matches = 1; // count the current position
+    for (int i = 2; i <= limit; i += 2) {
+        if (hashHistory[last - i] == key) {
             matches++;
             if (matches >= 3) return true;
         }
     }
 
     return false;
+}
+
+bool Board::isFiftyMoveDraw() const {
+    return halfmoveClock >= 100;
 }
 
 void Board::reset() {
@@ -154,6 +176,7 @@ void Board::reset() {
     allOcc = 0ULL;
     currentHash = generateHash();
     hashHistory.clear();
+    halfmoveClock = 0;
 }
 
 StateInfo Board::makeMove(Move m) {
@@ -164,7 +187,8 @@ StateInfo Board::makeMove(Move m) {
         w_queenside,
         b_kingside,
         b_queenside,
-        currentHash
+        currentHash,
+        halfmoveClock
     };
 
     nnue::accStack[nnue::accTop+1] = nnue::accStack[nnue::accTop];
@@ -432,6 +456,13 @@ StateInfo Board::makeMove(Move m) {
     blackOcc = pieces[BP] | pieces[BN] | pieces[BB] | pieces[BR] | pieces[BQ] | pieces[BK];
     allOcc = whiteOcc | blackOcc;
     currentHash = newHash;
+
+    if (piece == W_PAWN || piece == B_PAWN || s.capturedPiece != EMPTY) {
+        halfmoveClock = 0;
+    } else {
+        halfmoveClock++;
+    }
+
     hashHistory.push_back(currentHash);
 
     return s;
@@ -601,6 +632,7 @@ void Board::unmakeMove(Move m, StateInfo s) {
         hashHistory.pop_back();
     }
     currentHash = s.previousHash;
+    halfmoveClock = s.halfmoveClock;
     if (hashHistory.empty()) {
         hashHistory.push_back(currentHash);
     }
@@ -616,6 +648,7 @@ void Board::resetBb() {
     allOcc = 0ULL;
     currentHash = 0ULL;
     hashHistory.clear();
+    halfmoveClock = 0;
 }
 
 void Board::loadFromFen(std::string fen) {
@@ -626,6 +659,15 @@ void Board::loadFromFen(std::string fen) {
     std::stringstream ss(fen);
     std::string position, activeColor, castling, enPassant;
     ss >> position >> activeColor >> castling >> enPassant;
+
+    std::string halfmoveStr;
+    if (ss >> halfmoveStr) {
+        try {
+            halfmoveClock = std::stoi(halfmoveStr);
+        } catch (...) {
+            halfmoveClock = 0;
+        }
+    }
 
     w_kingside = (castling.find('K') != std::string::npos);
     w_queenside = (castling.find('Q') != std::string::npos);
