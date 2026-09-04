@@ -8,6 +8,8 @@ import java.io.File;
 public class CreateBoard extends JPanel {
     private int totalTurns = 1;
     private int turnsSinceCapture = 0;
+    private final java.util.HashMap<String, Integer> positionCounts = new java.util.HashMap<>();
+    private boolean gameOver = false;
     private int TILESIZE = 80;
     // Numerated Turns
     private static final int WHITE = 1;
@@ -62,11 +64,13 @@ public class CreateBoard extends JPanel {
         bridge.sendCommand("uci");
         bridge.sendCommand("isready");
         bridge.sendCommand("position fen " + getFen());
+        positionCounts.merge(positionKey(), 1, Integer::sum); // count the starting position
         // bridge.sendCommand("perft 6");
 
         addMouseListener(new MouseAdapter() {
             @Override
             public void mousePressed(MouseEvent e) {
+                if (gameOver) return;
                 int boardOriginX = getBoardOriginX();
                 int boardOriginY = getBoardOriginY();
                 int col = (e.getX() - boardOriginX) / TILESIZE;
@@ -135,6 +139,9 @@ public class CreateBoard extends JPanel {
 
                                     lastMoveFrom = sourceTile;
                                     lastMoveTo = clickedIndex;
+
+                                    boolean irreversible = (capturedPiece != 0 || piece == 1 || piece == 9);
+                                    recordPositionAndCheckDraw(irreversible);
                                 } else {
                                     System.out.println("ya move wong");
                                 }
@@ -267,6 +274,11 @@ public class CreateBoard extends JPanel {
         castling = false;
         lastMoveFrom = -1;
         lastMoveTo = -1;
+
+        // New starting position: reset repetition tracking and seed with this position.
+        gameOver = false;
+        positionCounts.clear();
+        positionCounts.merge(positionKey(), 1, Integer::sum);
 
         bridge.sendCommand("position fen " + getFen());
         repaint();
@@ -435,6 +447,7 @@ public class CreateBoard extends JPanel {
     }
 
     private void runEngineTurn() {
+        if (gameOver) return;
         bridge.sendCommand("position fen " + getFen());
         bridge.sendCommand("go");
         new Thread(() -> {
@@ -517,12 +530,10 @@ public class CreateBoard extends JPanel {
         return c;
     }
 
-    // How many of this piece type have left the board (captured), never negative.
     private int capturedCount(int piece) {
         return Math.max(0, startingCount(piece) - currentCount(piece));
     }
 
-    // Board palette (classic warm wood)
     private static final Color LIGHT_SQUARE   = new Color(240, 217, 181);
     private static final Color DARK_SQUARE    = new Color(181, 136, 99);
     private static final Color LAST_MOVE_TINT = new Color(246, 217, 99, 150);
@@ -543,7 +554,6 @@ public class CreateBoard extends JPanel {
         int boardOriginY = getBoardOriginY();
         int boardSize = TILESIZE * 8;
 
-        // soft drop shadow + frame around the board
         g2.setColor(new Color(0, 0, 0, 45));
         g2.fillRoundRect(boardOriginX - 3, boardOriginY - 3 + 4, boardSize + 6, boardSize + 6, 14, 14);
         g2.setColor(BOARD_FRAME);
@@ -944,6 +954,32 @@ public class CreateBoard extends JPanel {
         return true;
     }
 
+    private String positionKey() {
+        String[] parts = getFen().split(" ");
+        return parts[0] + " " + parts[1] + " " + parts[2] + " " + parts[3];
+    }
+
+    private void recordPositionAndCheckDraw(boolean irreversible) {
+        if (irreversible) positionCounts.clear();
+
+        String key = positionKey();
+        int count = positionCounts.merge(key, 1, Integer::sum);
+
+        if (count >= 3) {
+            announceDraw("Draw by threefold repetition");
+        } else if (turnsSinceCapture >= 100) {
+            announceDraw("Draw by fifty-move rule");
+        }
+    }
+
+    private void announceDraw(String message) {
+        if (gameOver) return;
+        gameOver = true;
+        repaint();
+        SwingUtilities.invokeLater(() ->
+            JOptionPane.showMessageDialog(null, "Game Over: " + message));
+    }
+
     public String getFen() {
         StringBuilder fen = new StringBuilder();
 
@@ -1041,7 +1077,8 @@ public class CreateBoard extends JPanel {
 
         int movingPiece = board[start];
         int capturedPiece = board[end];
-        if (capturedPiece != 0 && movingPiece != 9 && movingPiece != 1) turnsSinceCapture = 0;
+        if (capturedPiece == 0 && movingPiece != 1 && movingPiece != 9) turnsSinceCapture++;
+        else turnsSinceCapture = 0;
 
         if (capturedPiece == 4) {
             if (end == 63) canCastleWhiteKing = false;
@@ -1096,6 +1133,9 @@ public class CreateBoard extends JPanel {
         sourceTile = -1;
         lastMoveFrom = start;
         lastMoveTo = end;
+
+        boolean irreversible = (capturedPiece != 0 || movingPiece == 1 || movingPiece == 9);
+        recordPositionAndCheckDraw(irreversible);
 
         bridge.sendCommand("position fen " + getFen());
         bridge.sendCommand("checkmated");
