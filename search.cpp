@@ -85,8 +85,8 @@ Move search::startSearch(Board& board, int maxTimeMs) {
     Move bestMove = allMoves.moves[0];
     
     for (int curDepth = 1; curDepth <= 64; curDepth++) {
-        int curBestEval = NEG_INF;
-        Move curBestMove;
+        int curBestEval = NEG_INF - 128;
+        Move curBestMove = allMoves.moves[0];
 
         int alpha = NEG_INF, beta = POS_INF;
         int moveCount = 0;

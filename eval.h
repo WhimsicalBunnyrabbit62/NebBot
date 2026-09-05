@@ -16,7 +16,7 @@ public:
     static void initAll();
     static int evaluate(Board& board);
 
-    const static bool useNNUE = true;
+    const static bool useNNUE = false;
 
 private:
     static void initPassedMasks();
