@@ -171,12 +171,36 @@ public class CreateBoard extends JPanel {
         getInputMap(WHEN_IN_FOCUSED_WINDOW).put(KeyStroke.getKeyStroke('l'), "loadFen");
         getInputMap(WHEN_IN_FOCUSED_WINDOW).put(KeyStroke.getKeyStroke('L'), "loadFen");
         getActionMap().put("loadFen", new AbstractAction() {
-            @Override   
+            @Override
             public void actionPerformed(ActionEvent e) {
                 promptForFen();
             }
         });
+
+        // R to restart
+        getInputMap(WHEN_IN_FOCUSED_WINDOW).put(KeyStroke.getKeyStroke('r'), "restart");
+        getInputMap(WHEN_IN_FOCUSED_WINDOW).put(KeyStroke.getKeyStroke('R'), "restart");
+        getActionMap().put("restart", new AbstractAction() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                restartGame();
+            }
+        });
         System.out.println("Tip: press \"L\" to load a FEN and play from that position.");
+        System.out.println("Tip: press \"R\" to restart a new game.");
+    }
+
+    // restart to start
+    private void restartGame() {
+        if (loadFromFen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1")) {
+            int engineColor = playerStarting ? BLACK : WHITE;
+            if (currentTurn == engineColor) {
+                canMakeEngineMove = false;
+                runEngineTurn();
+            } else {
+                canMakeEngineMove = true;
+            }
+        }
     }
 
     // Ask the user for a FEN, load it, and let the engine reply if it is its turn.
