@@ -1,3 +1,3 @@
 # Neb Bot
 
-Luh project I been working on. 
+Chess Engine built using CPP and like some python. very coolios
